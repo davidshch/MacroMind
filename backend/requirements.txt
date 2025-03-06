@@ -1,0 +1,14 @@
+FastAPI
+uvicorn
+pydantic
+pydantic-settings
+sqlalchemy
+psycopg2-binary
+requests
+python-dotenv
+pytest
+httpx
+aiohttp
+python-jose[cryptography]
+passlib[bcrypt]
+email-validator
