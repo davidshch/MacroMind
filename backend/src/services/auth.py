@@ -1,15 +1,15 @@
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from ..config import get_settings
 from ..database.database import get_db
+from ..database.models import User  # Add this import
+from ..config import get_settings  # Add this import
+import logging
 
-if TYPE_CHECKING:
-    from ..database.models import User
-
+logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
@@ -29,14 +29,7 @@ def create_access_token(data: dict) -> str:
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db = Depends(get_db)
-):
-    from .user import UserService  # Import here to avoid circular import
-    
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid authentication credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+) -> User:
     try:
         payload = jwt.decode(
             token, 
@@ -45,11 +38,25 @@ async def get_current_user(
         )
         email: str = payload.get("sub")
         if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token format",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except JWTError as e:
+        logger.error(f"JWT decode error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
+    from .user import UserService  # Import here to avoid circular import
     user = UserService(db).get_user_by_email(email)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user

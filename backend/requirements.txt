@@ -12,3 +12,6 @@ aiohttp
 python-jose[cryptography]
 passlib[bcrypt]
 email-validator
+transformers
+torch
+newsapi-python
