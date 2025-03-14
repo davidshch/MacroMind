@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Boolean, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import enum
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -18,6 +19,7 @@ class User(Base):
     hashed_password = Column(String)
     is_vip = Column(Boolean, default=False)
     created_at = Column(DateTime)
+    alerts = relationship("Alert", back_populates="user")
 
 class EconomicEvent(Base):
     __tablename__ = "economic_events"
@@ -39,3 +41,18 @@ class MarketSentiment(Base):
     sentiment = Column(Enum(SentimentType))
     score = Column(Float)
     timestamp = Column(DateTime)
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    symbol = Column(String)
+    alert_type = Column(String)  # price, volatility, sentiment
+    condition = Column(JSON)
+    created_at = Column(DateTime, default=datetime.now())
+    is_active = Column(Boolean, default=True)
+    last_checked = Column(DateTime)
+    last_triggered = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="alerts")

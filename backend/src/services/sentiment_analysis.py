@@ -5,25 +5,18 @@ import aiohttp
 from ..config import get_settings
 from datetime import datetime, timedelta
 from fastapi import HTTPException
+from .base_sentiment import BaseSentimentAnalyzer
+from .social_sentiment import SocialSentimentService
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 settings = get_settings()
 
-class SentimentAnalysisService:
+class SentimentAnalysisService(BaseSentimentAnalyzer):
     def __init__(self):
-        self.sentiment_analyzer = pipeline(
-            "sentiment-analysis",
-            model="ProsusAI/finbert"
-        )
+        super().__init__()
         self.cache = {}
         self.cache_duration = timedelta(hours=1)
-        self.sentiment_mapping = {
-            "positive": "bullish",
-            "negative": "bearish",
-            "neutral": "neutral"
-        }
+        self.social_service = SocialSentimentService()
 
     async def analyze_text(self, text: str) -> Dict[str, Any]:
         try:
@@ -74,6 +67,78 @@ class SentimentAnalysisService:
         except Exception as e:
             logger.error(f"Error in get_market_sentiment: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_combined_sentiment(self, symbol: str) -> Dict[str, Any]:
+        """Get combined sentiment from all sources."""
+        try:
+            # Get sentiment from different sources
+            market_sentiment = await self.get_market_sentiment(symbol)
+            social_sentiment = await self.social_service.get_reddit_sentiment(symbol)  # Changed from get_combined_social_sentiment
+            
+            # Updated weights for combined sources
+            sources = [
+                (market_sentiment, 0.6),    # News/Market weight higher
+                (social_sentiment, 0.4)     # Reddit weight
+            ]
+            
+            combined_score = 0
+            for sentiment, weight in sources:
+                if sentiment["sentiment"] == "bullish":
+                    combined_score += weight * sentiment["confidence"]
+                elif sentiment["sentiment"] == "bearish":
+                    combined_score -= weight * sentiment["confidence"]
+            
+            # Determine overall sentiment
+            overall_sentiment = "neutral"
+            if combined_score > 0.2:
+                overall_sentiment = "bullish"
+            elif combined_score < -0.2:
+                overall_sentiment = "bearish"
+            
+            return {
+                "symbol": symbol,
+                "overall_sentiment": overall_sentiment,
+                "confidence_score": abs(combined_score),
+                "sources": {
+                    "market": market_sentiment,
+                    "social": social_sentiment
+                },
+                "momentum_indicators": self._calculate_momentum_indicators(
+                    market_sentiment, social_sentiment
+                ),
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error in combined sentiment analysis: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    def _calculate_momentum_indicators(
+        self,
+        market_sentiment: Dict[str, Any],
+        social_sentiment: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Calculate momentum indicators from different sentiment sources."""
+        return {
+            "trend_strength": self._calculate_trend_strength(
+                market_sentiment, social_sentiment
+            ),
+            "social_momentum": social_sentiment.get("total_engagement", 0),
+            "sentiment_alignment": market_sentiment["sentiment"] == social_sentiment["sentiment"]
+        }
+
+    def _calculate_trend_strength(
+        self,
+        market_sentiment: Dict[str, Any],
+        social_sentiment: Dict[str, Any]
+    ) -> str:
+        """Calculate trend strength based on sentiment alignment."""
+        if market_sentiment["sentiment"] == social_sentiment["sentiment"]:
+            confidence = (market_sentiment["confidence"] + social_sentiment["confidence"]) / 2
+            if confidence > 0.8:
+                return "strong"
+            elif confidence > 0.5:
+                return "moderate"
+        return "weak"
 
     async def _fetch_news(self, symbol: str) -> List[Dict[str, str]]:
         """Fetch recent news articles about a symbol."""

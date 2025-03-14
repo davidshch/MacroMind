@@ -29,3 +29,29 @@ async def analyze_text(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/combined/{symbol}", response_model=Dict[str, Any])
+async def get_combined_sentiment(
+    symbol: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get combined sentiment analysis from all sources."""
+    try:
+        service = SentimentAnalysisService()
+        sentiment = await service.get_combined_sentiment(symbol)
+        return sentiment
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/social/{symbol}", response_model=Dict[str, Any])
+async def get_social_sentiment(
+    symbol: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get sentiment analysis from social media sources."""
+    try:
+        service = SentimentAnalysisService()
+        sentiment = await service.social_service.get_reddit_sentiment(symbol)  # Changed from get_combined_social_sentiment
+        return sentiment
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
