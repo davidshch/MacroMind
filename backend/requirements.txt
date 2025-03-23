@@ -15,3 +15,8 @@ email-validator
 transformers
 torch
 newsapi-python
+praw
+finnhub-python
+prophet
+xgboost
+pandas

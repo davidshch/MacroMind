@@ -6,70 +6,67 @@
 ## 🌟 **Core Features**  
 
 ### **📊 Past Data Access**  
-- Retrieve **historical economic events and market data** for analysis.  
-- Store & fetch **macroeconomic indicators, stock movements, and major financial news events**.  
+- Historical **economic events and market data**.  
+- Impact tracking for **major financial events over time**.  
 
 ### **📰 Real-Time Market Sentiment**  
-- Analyze **financial news sources** (Bloomberg, Financial Times, CNBC, Federal Reserve, MarketWatch, etc.).  
-- Integrate **social media sentiment** (Twitter, Reddit, Trading Economics).  
-- Detect **bearish or bullish market indicators** (e.g., **10-year bond yield**).  
-- Real-time AI-driven **market sentiment classification (bullish/bearish/neutral)**.  
+- AI-driven **financial news sentiment classification** (Bloomberg, CNBC, Reuters, MarketWatch).  
+- Social media tracking (**Reddit, Twitter, FinTwit**).  
+- **Bearish/Bullish Indicators** (10-Year Bond Yield, VIX).  
+- **Institutional Sentiment Tracking** (Hedge fund positioning, insider transactions).  
 
 ### **📉 AI-Powered Volatility Estimation**  
-- AI model predicts **long-term volatility trends** based on:  
-  - **Macroeconomic trends**  
-  - **Sectoral correlations**  
-  - **Historical market reactions to similar conditions**  
-  - **Interest rates & inflation**  
-  - **Institutional investor sentiment**  
-  - **Geopolitical developments & structural market shifts**  
-- Predictions for **major economic sectors (Tech, Finance, Energy, etc.)**.  
+- AI model predicts **sector volatility** using:  
+  - **Macroeconomic indicators** (GDP, Inflation, Interest Rates).  
+  - **Technical indicators** (Advance/Decline Ratio, VIX).  
+  - **Market positioning** (Put/Call Ratio, Open Interest).  
 
 ### **🔍 Ticker Symbol Search**  
-- **Search function** allowing users to look up specific stock, forex, or crypto symbols.  
-- Displays **real-time market data**, historical performance, and sentiment scores.  
+- Search function to find **real-time market data** on specific stocks, forex, crypto.  
+- Displays **historical price action & sentiment trends**.  
 
 ### **📆 Event Tracking & Approximate Outcome Forecasting**  
-- **Calendar of upcoming economic events**, including:  
-  - **Consumer confidence reports**  
-  - **Marginal household income data**  
-  - **GDP growth rates**  
-  - **Inflation trends**  
-  - **Everything the Federal Reserve considers for rate decisions**  
-- AI-driven **event outcome forecasting** based on historical patterns.  
+- AI forecasts **market reactions** to economic events.  
+- **Tracks economic indicators used by the Federal Reserve** (Consumer confidence, GDP growth, inflation).  
+- Benchmarks **sector performance against market indexes** (S&P 500, Nasdaq-100).  
 
 ---
 
 ## 🏆 **VIP Member Features**  
-(*Exclusive features for paid users*)  
+
+### **🤖 AI Market Agent (Basic Version for MVP)**
+
+- AI-powered market analysis assistant, beyond just a chatbot.
+- Users can query the AI about volatility trends, macroeconomic indicators, and market insights.
+- AI processes volatility predictions, sentiment trends, and economic data to generate actionable insights.
+- Backend built in FastAPI, AI logic implemented in Hybrid ML (XGBoost + LLM-based insights with LangChain).
+- Frontend enables interactive AI-based market discussions.
 
 ### **🤖 AI Explanation Tool**  
-- **AI-powered chatbot** that provides clear breakdowns of **economic data, market sentiment, and forecasts**.  
+- AI-powered **chatbot** to analyze **economic data & market sentiment**.  
 - Users can ask:  
-  > *"Why is inflation rising?"* → AI explains based on real-time data.  
+  > *"Why is the market reacting to today's Fed announcement?"*  
 
 ### **🔔 Custom Alerts**  
 - User-defined **notifications** for:  
   - **Key market events (Fed meetings, earnings reports, CPI releases, etc.)**  
-  - **Sudden changes in volatility**  
-  - **Bullish/Bearish sentiment shifts**  
+  - **Volatility spikes** & **sentiment reversals**.  
 
 ### **📈 Interactive Data Visualization**  
-- **Advanced graphs & charts** for:  
-  - Historical economic data  
-  - Predictive analytics (AI-driven forecasts)  
-  - **Real-time sentiment trends**  
+- **Real-time & historical data charts** (TradingView-inspired UI).  
+- **Market sentiment overlays** (bearish/bullish heatmaps).  
 
 ---
 
 ## **💻 Tech Stack**  
 ### **Backend:**  
-- **FastAPI** (Python) → API for market data, sentiment analysis, and AI predictions.  
-- **PostgreSQL** → Stores economic event data & historical sentiment trends.  
-- **Redis** (Optional) → Real-time market alerts.  
-- **Hugging Face Transformers (BERT/GPT)** → Sentiment Analysis AI.  
-- **Yahoo Finance API / Alpha Vantage** → Fetch real-time market data.  
-- **Stripe** → Payment handling
+- **FastAPI** (Python) → API for financial data & AI predictions.  
+- **PostgreSQL** → Database for storing economic data.  
+- **Redis** (Optional) → Caching for real-time API calls.  
+- **Hugging Face Transformers (FinBERT)** → AI sentiment analysis.  
+- **Prophet (Facebook)** → Time-series forecasting.  
+- **Stripe API** → Payment processing for VIP features. 
+- **LLM** → GPT API used with LangChain for AI Agent 
 
 ### **Frontend:**  
 - **Next.js (React)** → UI framework for the dashboard.  
@@ -88,3 +85,5 @@
 - Implement **asynchronous requests** where needed for real-time data.  
 - Use **Hugging Face NLP models** for sentiment analysis.  
 - Optimize **UI for high-performance financial data visualization**.  
+- Don't overdo with file creation and code generation and only do what is necessary for what is being asked and for the project. For "extra" things clarify with user and keep in mind if it is beneficial for the project and not cluttering everything. Everything should be concise and efficient.
+- Implement **rate-limiting & caching** to manage API limits.  

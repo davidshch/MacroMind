@@ -13,7 +13,7 @@ class VIPUpdateRequest(BaseModel):
     is_vip: bool
 
 # For now, a simple admin check. In production, you'd want proper role-based access control
-ADMIN_EMAILS = ["admin@example.com"]  # Add your admin email here
+ADMIN_EMAILS = ["david@gmail.com"]  # Add your admin email here
 
 async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     if current_user.email not in ADMIN_EMAILS:

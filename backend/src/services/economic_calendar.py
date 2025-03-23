@@ -1,3 +1,5 @@
+"""Economic calendar service for tracking and analyzing market events."""
+
 from typing import List, Dict, Any
 import aiohttp
 from datetime import datetime, timedelta
@@ -8,6 +10,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 class EconomicCalendarService:
+    """Manages economic events and impact analysis."""
+    
     def __init__(self):
         self.cache = {}
         self.cache_duration = timedelta(hours=4)
@@ -18,7 +22,7 @@ class EconomicCalendarService:
         end_date: datetime = None,
         importance: str = "high"
     ) -> List[Dict[str, Any]]:
-        """Fetch economic events within a date range."""
+        """Get economic events within date range."""
         if not start_date:
             start_date = datetime.now()
         if not end_date:
@@ -39,7 +43,7 @@ class EconomicCalendarService:
             raise
 
     async def predict_event_impact(self, event_type: str) -> Dict[str, Any]:
-        """Predict the market impact of an economic event."""
+        """Predict market impact of economic event."""
         try:
             # Implement basic impact prediction based on historical data
             historical_impacts = await self._get_historical_event_impacts(event_type)
@@ -87,7 +91,7 @@ class EconomicCalendarService:
         return events
 
     def _calculate_impact_score(self, historical_impacts: List[Dict[str, Any]]) -> float:
-        """Calculate impact score based on historical data."""
+        """Calculate likely market impact based on similar past events."""
         # Placeholder - implement actual calculation logic
         return 0.65
 
