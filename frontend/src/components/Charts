@@ -1,0 +1,28 @@
+// File: /macromind/macromind/frontend/src/components/Charts/index.tsx
+
+import React from 'react';
+import { Line } from 'react-chartjs-2';
+
+const Charts: React.FC<{ data: any }> = ({ data }) => {
+    const chartData = {
+        labels: data.labels,
+        datasets: [
+            {
+                label: 'Market Data',
+                data: data.values,
+                borderColor: 'rgba(75,192,192,1)',
+                backgroundColor: 'rgba(75,192,192,0.2)',
+                fill: true,
+            },
+        ],
+    };
+
+    return (
+        <div>
+            <h2>Market Data Visualization</h2>
+            <Line data={chartData} />
+        </div>
+    );
+};
+
+export default Charts;

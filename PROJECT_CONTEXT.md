@@ -69,6 +69,7 @@
 - **Redis** (Optional) → Real-time market alerts.  
 - **Hugging Face Transformers (BERT/GPT)** → Sentiment Analysis AI.  
 - **Yahoo Finance API / Alpha Vantage** → Fetch real-time market data.  
+- **Stripe** → Payment handling
 
 ### **Frontend:**  
 - **Next.js (React)** → UI framework for the dashboard.  
@@ -78,25 +79,6 @@
 ### **Deployment:**  
 - **Render / AWS EC2** (Backend hosting)  
 - **Vercel** (Frontend hosting)  
-
----
-
-## **✅ Current Progress**  
-✔ **Backend Setup**: FastAPI, PostgreSQL, economic event API  
-✔ **Data Storage**: Economic events stored in PostgreSQL  
-✔ **Market API**: Fetching real-time market data  
-🔲 **Sentiment Analysis**: AI models for real-time & historical sentiment  
-🔲 **Frontend UI**: Dashboard for economic events & sentiment trends  
-🔲 **Custom Alerts & AI Chatbot**  
-
----
-
-## **🚀 Next Steps**
-1️⃣ **Test API integration with the frontend**  
-2️⃣ **Implement AI Sentiment Analysis** (Hugging Face Transformers)  
-3️⃣ **Develop Volatility Estimation Model**  
-4️⃣ **Refine AI-based event forecasting**  
-5️⃣ **Deploy backend on Render / AWS**  
 
 ---
 
