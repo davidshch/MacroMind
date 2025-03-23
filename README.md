@@ -1,4 +1,4 @@
-# MacroMind
+# MacroMind 📈🚀
 
 Cutting-edge financial analytics platform and economic calendar combining AI-powered sentiment analysis with real-time market data.
 
@@ -12,7 +12,7 @@ MacroMind helps traders and analysts make data-driven decisions by:
 
 ## Core Technology
 
-- **AI-Powered Analysis**: FinBERT for sentiment analysis, XGBoost and Prophet for volatility forecasting
+- **AI-Powered Analysis**: FinBERT (sentiment classification), XGBoost (volatility regression), and Prophet (time series forecasting)
 - **Real-Time Processing**: WebSocket streaming, efficient data aggregation
 - **Multi-Source Data**: Integration with major financial APIs and social platforms
 - **Advanced Analytics**: Technical indicators, sentiment correlation, market impact prediction
