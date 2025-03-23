@@ -1,22 +1,25 @@
+"""Real-time market data streaming via WebSocket."""
+
 from typing import Dict, List, Any
 from fastapi import WebSocket
-import json
 import asyncio
 import logging
 from datetime import datetime
 from .market_data import MarketDataService
 from .sentiment_analysis import SentimentAnalysisService
-from .alerts import AlertService
 
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
+    """WebSocket connection and broadcast management."""
+
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
         self.market_service = MarketDataService()
         self.sentiment_service = SentimentAnalysisService()
 
     async def connect(self, websocket: WebSocket, symbol: str):
+        """Add new WebSocket connection."""
         await websocket.accept()
         if symbol not in self.active_connections:
             self.active_connections[symbol] = []
@@ -24,12 +27,14 @@ class ConnectionManager:
         logger.info(f"New connection for {symbol}. Total connections: {len(self.active_connections[symbol])}")
 
     def disconnect(self, websocket: WebSocket, symbol: str):
+        """Remove WebSocket connection."""
         self.active_connections[symbol].remove(websocket)
         if not self.active_connections[symbol]:
             del self.active_connections[symbol]
         logger.info(f"Connection closed for {symbol}")
 
     async def broadcast_to_symbol(self, symbol: str, message: Dict[str, Any]):
+        """Send data to all connections for a symbol."""
         if symbol not in self.active_connections:
             return
         
@@ -40,7 +45,7 @@ class ConnectionManager:
                 logger.error(f"Error broadcasting to {symbol}: {str(e)}")
 
     async def start_streaming(self):
-        """Start streaming market data for all connected symbols."""
+        """Start real-time data broadcast loop."""
         while True:
             try:
                 for symbol in list(self.active_connections.keys()):
@@ -52,7 +57,7 @@ class ConnectionManager:
             await asyncio.sleep(5)  # Update every 5 seconds
 
     async def _get_real_time_data(self, symbol: str) -> Dict[str, Any]:
-        """Get real-time market data and sentiment."""
+        """Get latest market data and sentiment."""
         try:
             market_data = await self.market_service.get_stock_data(symbol)
             sentiment = await self.sentiment_service.get_market_sentiment(symbol)

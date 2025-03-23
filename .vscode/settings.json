@@ -1,2 +1,25 @@
 {
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "text": "Use Python for the backend (FastAPI), JavaScript (React/Next.js) for the frontend. Use TypeScript when applicable in the frontend. - Follow best practices for FastAPI: use Pydantic models, async routes, and dependency injection. - Use SQLAlchemy ORM for database operations with PostgreSQL. Ensure queries are optimized. - Implement API error handling with structured responses (status codes, JSON messages). - All API calls should be non-blocking (async/await) to improve performance. - Implement environment variable handling securely for API keys. - Use GitHub Copilot's best coding practices to maximize efficiency. - Write clean, modular functions with comments explaining purpose and expected inputs/outputs. - When generating AI-related code, prioritize FinBERT for sentiment analysis, Prophet for time-series forecasting, and XGBoost for economic predictions. - When generating React components, ensure they follow Next.js best practices (server-side rendering where applicable). - Use TailwindCSS for styling and Recharts for financial data visualization. - Avoid inline CSS. Ensure all components are fully responsive for mobile and desktop users. - Always ensure generated functions have docstrings formatted in Google Python style."
+        },
+        {
+            "file": "./PROJECT_CONTEXT.md"
+        }
+    ],
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        {
+            "text": "Write highly detailed commit messages that include: - A concise summary of the changes made. - The affected files and their purpose. - A clear reason for the modification. - If fixing a bug, include the issue number. - If implementing a new feature, describe its function and impact. - Example: 'Added sentiment analysis function using FinBERT in sentiment_analysis.py. This function classifies financial discussions into positive, neutral, or negative. Integrated it with the Reddit API data processing pipeline.'"
+        }
+    ],
+    "github.copilot.chat.reviewSelection.instructions": [
+        {
+            "text": "Review all generated code with the following rules: - Ensure all functions have docstrings explaining parameters, return values, and functionality. - Validate that database queries using SQLAlchemy are optimized (avoid N+1 queries). - Ensure all FastAPI routes use async functions where applicable. - Check for proper API key security: secrets should always be stored in environment variables. - Validate that React components are structured efficiently, using functional components with hooks instead of class components. - Ensure any AI models used follow best practices for loading, caching, and inference. - Require proper error handling for API responses: avoid generic exceptions. - If code involves API calls, check for proper error handling (timeouts, retries). - If testing, ensure unit tests follow the Arrange-Act-Assert pattern."
+        }
+    ],
+    "github.copilot.chat.testGeneration.instructions": [
+        {
+            "text": "Generate unit tests that: - Use pytest for backend tests. - Use Jest and React Testing Library for frontend tests. - Follow the AAA (Arrange-Act-Assert) pattern. - Test both expected behavior and edge cases. - Ensure FastAPI endpoints return expected JSON responses with correct status codes. - For database queries, mock database interactions using pytest fixtures. - Use snapshot testing for React components where applicable."
+        }
+    ]
 }

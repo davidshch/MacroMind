@@ -11,7 +11,21 @@ from .social_sentiment import SocialSentimentService
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+"""
+Sentiment Analysis Service
+
+Implements financial sentiment analysis using FinBERT. Processes news articles,
+social media content, and market data to generate sentiment predictions.
+
+Uses:
+- FinBERT for text analysis
+- News API for article fetching
+- Caching for API optimization
+"""
+
 class SentimentAnalysisService(BaseSentimentAnalyzer):
+    """Service for analyzing market sentiment from multiple sources."""
+    
     def __init__(self):
         super().__init__()
         self.cache = {}
@@ -19,6 +33,14 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
         self.social_service = SocialSentimentService()
 
     async def analyze_text(self, text: str) -> Dict[str, Any]:
+        """Analyze financial text sentiment.
+
+        Returns:
+            dict: Sentiment classification and confidence score
+            
+        Raises:
+            HTTPException: If analysis fails
+        """
         try:
             result = self.sentiment_analyzer(text)[0]
             mapped_sentiment = self.sentiment_mapping[result["label"]]

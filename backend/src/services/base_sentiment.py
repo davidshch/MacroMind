@@ -1,3 +1,5 @@
+"""Base class for sentiment analysis using FinBERT."""
+
 from typing import Dict, Any
 from transformers import pipeline
 from datetime import datetime
@@ -6,6 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BaseSentimentAnalyzer:
+    """Base sentiment analyzer with FinBERT pipeline."""
+
     def __init__(self):
         self.sentiment_analyzer = pipeline(
             "sentiment-analysis",
@@ -18,7 +22,7 @@ class BaseSentimentAnalyzer:
         }
 
     async def analyze_text(self, text: str) -> Dict[str, Any]:
-        """Base method for text sentiment analysis."""
+        """Analyze text sentiment and map to market context."""
         try:
             result = self.sentiment_analyzer(text)[0]
             mapped_sentiment = self.sentiment_mapping[result["label"]]

@@ -1,3 +1,16 @@
+"""
+WebSocket API Routes.
+
+This module defines WebSocket endpoints for real-time data streaming.
+Handles client connections, message routing, and connection lifecycle.
+
+Features:
+- Real-time market data streaming
+- Client connection management
+- Message broadcasting
+- Error handling
+"""
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from ...services.websocket import ConnectionManager
 from ...services.auth import get_current_user
@@ -11,7 +24,31 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
-    """WebSocket endpoint for real-time market data."""
+    """
+    WebSocket endpoint for real-time market data streaming.
+
+    Establishes persistent connection for streaming:
+    - Live price updates
+    - Sentiment changes
+    - Trading signals
+    - Market alerts
+
+    Technical Details:
+        - Connection pooling by symbol
+        - Heartbeat monitoring
+        - Auto-reconnection support
+        - Rate limiting implementation
+
+    Args:
+        websocket (WebSocket): Client WebSocket connection
+        symbol (str): Trading symbol to monitor
+
+    Socket Messages:
+        - price_update: Real-time price changes
+        - sentiment_update: Sentiment shifts
+        - alert: Trading signals and alerts
+        - heartbeat: Connection health check
+    """
     try:
         await manager.connect(websocket, symbol)
         try:

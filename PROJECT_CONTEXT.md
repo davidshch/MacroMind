@@ -34,6 +34,14 @@
 
 ## 🏆 **VIP Member Features**  
 
+### **🤖 AI Market Agent (Basic Version for MVP)**
+
+- AI-powered market analysis assistant, beyond just a chatbot.
+- Users can query the AI about volatility trends, macroeconomic indicators, and market insights.
+- AI processes volatility predictions, sentiment trends, and economic data to generate actionable insights.
+- Backend built in FastAPI, AI logic implemented in Hybrid ML (XGBoost + LLM-based insights with LangChain).
+- Frontend enables interactive AI-based market discussions.
+
 ### **🤖 AI Explanation Tool**  
 - AI-powered **chatbot** to analyze **economic data & market sentiment**.  
 - Users can ask:  
@@ -57,7 +65,8 @@
 - **Redis** (Optional) → Caching for real-time API calls.  
 - **Hugging Face Transformers (FinBERT)** → AI sentiment analysis.  
 - **Prophet (Facebook)** → Time-series forecasting.  
-- **Stripe API** → Payment processing for VIP features.  
+- **Stripe API** → Payment processing for VIP features. 
+- **LLM** → GPT API used with LangChain for AI Agent 
 
 ### **Frontend:**  
 - **Next.js (React)** → UI framework for the dashboard.  
@@ -76,4 +85,5 @@
 - Implement **asynchronous requests** where needed for real-time data.  
 - Use **Hugging Face NLP models** for sentiment analysis.  
 - Optimize **UI for high-performance financial data visualization**.  
+- Don't overdo with file creation and code generation and only do what is necessary for what is being asked and for the project. For "extra" things clarify with user and keep in mind if it is beneficial for the project and not cluttering everything. Everything should be concise and efficient.
 - Implement **rate-limiting & caching** to manage API limits.  

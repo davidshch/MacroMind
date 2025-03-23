@@ -1,70 +1,144 @@
-# MacroMind Project
+# MacroMind
 
-MacroMind is an AI-powered economic calendar designed to provide real-time market insights, sentiment analysis, and volatility predictions for traders, investors, and financial analysts. This project aims to deliver a comprehensive tool that integrates various data sources and utilizes advanced AI techniques to enhance decision-making in financial markets.
+Cutting-edge financial analytics platform and economic calendar combining AI-powered sentiment analysis with real-time market data.
 
-## Table of Contents
+## Overview
 
-- [Core Features](#core-features)
-- [Tech Stack](#tech-stack)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
+MacroMind helps traders and analysts make data-driven decisions by:
+- Analyzing market sentiment across multiple sources in real-time
+- Predicting volatility using advanced ML models
+- Tracking economic events and their market impact
+- Providing institutional-grade technical analysis
 
-## Core Features
+## Core Technology
 
-- **Past Data Access**: Retrieve historical economic events and market data for analysis.
-- **Real-Time Market Sentiment**: Analyze financial news and social media sentiment to detect market indicators.
-- **AI-Powered Volatility Estimation**: Predict long-term volatility trends based on various economic factors.
-- **Ticker Symbol Search**: Search for specific stock, forex, or crypto symbols with real-time data.
-- **Event Tracking & Forecasting**: Track upcoming economic events and forecast their outcomes using AI.
+- **AI-Powered Analysis**: FinBERT for sentiment analysis, XGBoost and Prophet for volatility forecasting
+- **Real-Time Processing**: WebSocket streaming, efficient data aggregation
+- **Multi-Source Data**: Integration with major financial APIs and social platforms
+- **Advanced Analytics**: Technical indicators, sentiment correlation, market impact prediction
 
-## Tech Stack
+## Key Features
 
-- **Backend**: FastAPI (Python), PostgreSQL, Redis (optional), Hugging Face Transformers (BERT/GPT), Yahoo Finance API / Alpha Vantage, Stripe.
-- **Frontend**: Next.js (React), Recharts.js, Axios.
-- **Deployment**: Render / AWS EC2 (Backend), Vercel (Frontend).
+🔹 **Market Intelligence**
+- Real-time sentiment analysis
+- Economic event tracking
+- Technical indicator analysis
 
-## Installation
+🔹 **Advanced Analytics**
+- Volatility predictions
+- Market trend analysis
+- Impact forecasting
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/macromind.git
-   cd macromind
-   ```
+🔹 **Technical Stack**
+- Backend: FastAPI, PostgreSQL
+- ML: Hugging Face, XGBoost, Facebook Prophet
+- Data Sources: Alpha Vantage, Finnhub, News API, Reddit
 
-2. Set up the backend:
-   - Navigate to the `backend` directory.
-   - Install dependencies:
-     ```
-     pip install -r requirements.txt
-     ```
+## Project Status
 
-3. Set up the frontend:
-   - Navigate to the `frontend` directory.
-   - Install dependencies:
-     ```
-     npm install
-     ```
+✅ Implemented:
+- **Core Infrastructure**
+  - FastAPI backend setup with async support
+  - PostgreSQL database integration
+  - JWT authentication system
+  - Rate limiting and caching mechanisms
+  - Comprehensive error handling
 
-## Usage
+- **Market Data Features**
+  - Real-time stock data fetching (Alpha Vantage)
+  - Enhanced company data (Finnhub)
+  - Historical price data analysis
+  - Technical indicator calculations
+  - WebSocket streaming for live updates
 
-- Start the backend server:
-  ```
-  uvicorn src.main:app --reload
-  ```
+- **AI & Analytics**
+  - FinBERT-powered sentiment analysis
+  - Multi-source sentiment aggregation (news, social)
+  - Volatility analysis and forecasting
+  - Market trend detection
+  - Support/resistance level identification
 
-- Start the frontend application:
-  ```
-  npm run dev
-  ```
+- **Economic Calendar**
+  - Event tracking and management
+  - Impact prediction system
+  - Market sector correlation analysis
+  - Historical event performance tracking
 
-Visit `http://localhost:3000` to access the application.
+- **Alert System**
+  - Custom price alerts
+  - Volatility threshold monitoring
+  - Sentiment shift detection
+  - Real-time notification system
 
-## Contributing
+- **VIP Features**
+  - AI market explanation engine
+  - Enhanced data access
+  - Premium alert capabilities
+  - Comprehensive market analysis
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or features you'd like to add.
+🚧 In Progress:
+- Advanced sentiment analysis optimization
+- Machine learning model refinements
+- Testing coverage expansion
+- Performance optimization
 
-## License
+📋 Planned:
+- Frontend development (Next.js)
+- Advanced AI features integration
+- Extended VIP capabilities
+- Mobile responsiveness
+- Additional data sources
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+## Technical Documentation
+
+- [API Reference](./API_DOCUMENTATION.md)
+
+## Security and Performance
+
+- JWT authentication
+- Rate limiting
+- Async processing
+- Efficient caching
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph External
+        A[Market Data APIs] 
+        B[News APIs]
+        C[Social Media APIs]
+    end
+    
+    subgraph Core Services
+        D[Data Processing]
+        E[Sentiment Analysis]
+        F[Volatility Prediction]
+    end
+    
+    subgraph Infrastructure
+        G[FastAPI]
+        H[PostgreSQL]
+        I[WebSocket]
+    end
+    
+    A & B & C --> D
+    D --> E & F
+    E & F --> G
+    G --> H
+    G --> I
+
+```
+
+## Setup Instructions
+> Note: This project is currently in development. Core features are being implemented.
+
+The full setup guide will be available once the MVP is completed.
+
+## 📜 License
+
+This project is licensed under the **Apache License 2.0**.  
+
+You are free to use, modify, and distribute this software **as long as you comply with the license terms,** including **giving proper credit** and **not holding the developers liable for any use of this software.**  
+
+📄 See the full **[LICENSE](LICENSE)** file for details.

@@ -1,3 +1,5 @@
+"""Market alert system for price, volatility, and sentiment monitoring."""
+
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -11,6 +13,8 @@ from .volatility import VolatilityService
 logger = logging.getLogger(__name__)
 
 class AlertService:
+    """Service for managing user-defined market alerts."""
+
     def __init__(self, db: Session):
         self.db = db
         self.market_service = MarketDataService()
@@ -22,14 +26,9 @@ class AlertService:
             "sentiment": self._check_sentiment_condition
         }
 
-    async def create_alert(
-        self,
-        user_id: int,
-        symbol: str,
-        alert_type: str,
-        condition: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Create a new alert for a user."""
+    async def create_alert(self, user_id: int, symbol: str, 
+                          alert_type: str, condition: Dict[str, Any]) -> Dict[str, Any]:
+        """Create new market alert for user."""
         new_alert = Alert(
             user_id=user_id,
             symbol=symbol,

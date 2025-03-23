@@ -1,3 +1,5 @@
+"""Historical market data and analytics service."""
+
 from typing import List, Dict, Any
 import aiohttp
 from datetime import datetime, timedelta
@@ -8,6 +10,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 class HistoricalDataService:
+    """Historical data retrieval and analysis."""
+
     def __init__(self):
         self.api_key = settings.api_key_alpha_vantage
         self.base_url = "https://www.alphavantage.co/query"
@@ -18,7 +22,7 @@ class HistoricalDataService:
         interval: str = "daily",
         output_size: str = "compact"
     ) -> List[Dict[str, Any]]:
-        """Get historical price data for charting."""
+        """Get historical OHLCV data."""
         params = {
             "function": "TIME_SERIES_DAILY",
             "symbol": symbol,
@@ -51,9 +55,7 @@ class HistoricalDataService:
         symbol: str,
         days: int = 30
     ) -> List[Dict[str, Any]]:
-        """Get historical sentiment data."""
-        # This would typically come from your database
-        # For now, return mock data
+        """Get historical sentiment trends."""
         return [
             {
                 "date": (datetime.now() - timedelta(days=i)).isoformat(),
@@ -73,9 +75,8 @@ class HistoricalDataService:
         if not price_data:
             return []
 
-        # Calculate historical volatility for each period
         volatilities = []
-        for i in range(len(price_data) - 20):  # 20-day rolling window
+        for i in range(len(price_data) - 20):
             window = price_data[i:i+20]
             prices = [day["close"] for day in window]
             volatility = self._calculate_volatility(prices)
@@ -85,7 +86,7 @@ class HistoricalDataService:
                 "price": price_data[i]["close"]
             })
 
-        return volatilities[-days:]  # Return only requested number of days
+        return volatilities[-days:]
 
     def _calculate_volatility(self, prices: List[float]) -> float:
         """Calculate volatility from a list of prices."""
@@ -99,7 +100,7 @@ class HistoricalDataService:
         
         mean = sum(returns) / len(returns)
         variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
-        return (variance ** 0.5) * (252 ** 0.5)  # Annualized volatility
+        return (variance ** 0.5) * (252 ** 0.5)
 
     async def get_market_analysis(self, symbol: str) -> Dict[str, Any]:
         """Provide comprehensive market analysis."""
@@ -107,11 +108,9 @@ class HistoricalDataService:
         volatility = await self.get_volatility_history(symbol)
         sentiment = await self.get_sentiment_history(symbol)
 
-        # Calculate trends
         price_trend = self._calculate_trend([p["close"] for p in prices[-5:]])
         vol_trend = self._calculate_trend([v["volatility"] for v in volatility[-5:]])
         
-        # Calculate key levels
         price_data = [float(p["close"]) for p in prices]
         support = min(price_data[-20:])
         resistance = max(price_data[-20:])

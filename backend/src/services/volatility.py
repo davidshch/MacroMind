@@ -1,49 +1,44 @@
+"""Volatility analysis and forecasting service."""
+
 import numpy as np
 from typing import Dict, Any, List
 import aiohttp
 from datetime import datetime, timedelta
 from ..config import get_settings
-import logging
 from fastapi import HTTPException
-settings = get_settings()
+import logging
+
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.ERROR)
 settings = get_settings()
 
 class VolatilityService:
+    """Market volatility analysis with trend prediction."""
+
     def __init__(self):
+        """Initialize service with API and cache settings."""
         self.api_key = settings.api_key_alpha_vantage
         self.cache = {}
         self.cache_duration = timedelta(hours=24)
 
     async def calculate_volatility(self, symbol: str) -> Dict[str, Any]:
-        """Calculate historical volatility and predict future volatility."""
+        """Calculate volatility metrics and trend."""
         try:
-            # Get historical data
             historical_data = await self._fetch_historical_data(symbol)
-            
-            # Calculate daily returns
             prices = [float(x['4. close']) for x in historical_data]
             daily_returns = np.diff(np.log(prices))
             
-            # Calculate historical volatility (20-day)
-            historical_vol = np.std(daily_returns) * np.sqrt(252)  # Annualized
-            
-            # Simple volatility prediction (using historical vol and recent trend)
+            historical_vol = np.std(daily_returns) * np.sqrt(252)
             recent_vol = np.std(daily_returns[-10:]) * np.sqrt(252)
-            vol_trend = recent_vol - historical_vol
             
             return {
                 "symbol": symbol,
                 "historical_volatility": float(historical_vol),
-                "predicted_volatility": float(max(0, historical_vol + vol_trend)),
-                "confidence": 0.7,  # Placeholder for more sophisticated models
-                "period": "20-day",
-                "last_updated": datetime.now().isoformat(),
-                "market_conditions": self._assess_market_conditions(historical_vol, recent_vol)
+                "predicted_volatility": float(max(0, historical_vol + (recent_vol - historical_vol))),
+                "market_conditions": self._assess_market_conditions(historical_vol, recent_vol),
+                "last_updated": datetime.now().isoformat()
             }
         except Exception as e:
-            logger.error(f"Error calculating volatility: {str(e)}")
+            logger.error(f"Volatility calculation error: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to calculate volatility")
 
     async def _fetch_historical_data(self, symbol: str) -> List[Dict[str, Any]]:

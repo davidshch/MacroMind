@@ -16,4 +16,7 @@ transformers
 torch
 newsapi-python
 praw
-finnhub-python  # Add Finnhub client
+finnhub-python
+prophet
+xgboost
+pandas
