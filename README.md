@@ -103,31 +103,125 @@ MacroMind helps traders and analysts make data-driven decisions by:
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph External
-        A[Market Data APIs] 
-        B[News APIs]
-        C[Social Media APIs]
+flowchart TD
+    %% External Services Layer
+    subgraph "External Services"
+        ExternalDS["External Data Sources"]:::external
     end
-    
-    subgraph Core Services
-        D[Data Processing]
-        E[Sentiment Analysis]
-        F[Volatility Prediction]
-    end
-    
-    subgraph Infrastructure
-        G[FastAPI]
-        H[PostgreSQL]
-        I[WebSocket]
-    end
-    
-    A & B & C --> D
-    D --> E & F
-    E & F --> G
-    G --> H
-    G --> I
 
+    %% Core Services Layer
+    subgraph "Core Services"
+        %% Data Processing Group
+        subgraph "Data Processing"
+            AggDP["Aggregation Data Processing"]:::core
+            HistDP["Historical Data Processing"]:::core
+        end
+        %% Sentiment Analysis Group
+        subgraph "Sentiment Analysis"
+            SentRoute["Sentiment API Endpoint"]:::core
+            SentPipe["Sentiment Pipeline"]:::core
+            SentAnalysis["Sentiment Analysis Service"]:::core
+        end
+        %% Volatility Prediction Group
+        subgraph "Volatility Prediction"
+            VolatilityRoute["Volatility API Endpoint"]:::core
+            VolService["Volatility Service"]:::core
+            MLFactory["ML Model Factory"]:::core
+        end
+        %% Economic Calendar & Alerts Group
+        subgraph "Economic Calendar & Alerts"
+            EconCalRoute["Economic Calendar API"]:::core
+            AlertsRoute["Alerts API"]:::core
+            EconCalService["Economic Calendar Service"]:::core
+            AlertsService["Alerts Service"]:::core
+        end
+    end
+
+    %% Infrastructure Layer
+    subgraph "Infrastructure"
+        FastAPI["FastAPI Server"]:::api
+        Database["PostgreSQL Database"]:::db
+        WebSocket["WebSocket Service"]:::ws
+    end
+
+    %% DevOps & Frontend Layer
+    subgraph "Deployment & Presentation"
+        DockerDeploy["Docker & Deployment"]:::devops
+        Frontend["Frontend (Next.js)"]:::frontend
+    end
+
+    %% Relationships from External Services to Data Processing
+    ExternalDS -->|"Real-timeDataIngestion"| AggDP
+    ExternalDS -->|"Real-timeDataIngestion"| HistDP
+
+    %% Data Processing forwarding to Sentiment, Volatility, and Economic Calendar
+    AggDP -->|"ProcessedData"| SentRoute
+    HistDP -->|"ProcessedData"| SentRoute
+
+    AggDP -->|"ProcessedData"| VolatilityRoute
+    HistDP -->|"ProcessedData"| VolatilityRoute
+
+    AggDP -->|"RealTimeEventData"| EconCalRoute
+    HistDP -->|"RealTimeEventData"| EconCalRoute
+
+    %% Sentiment Analysis Flow
+    SentRoute -->|"TriggerPipeline"| SentPipe
+    SentPipe -->|"AnalysisResults"| SentAnalysis
+
+    %% Volatility Prediction Flow
+    VolatilityRoute -->|"TriggerVolatilityAnalysis"| VolService
+    VolService -->|"MLInference"| MLFactory
+
+    %% Economic Calendar & Alerts Flow
+    EconCalRoute -->|"FetchEvents"| EconCalService
+    AlertsRoute -->|"TriggerAlerts"| AlertsService
+
+    %% Core Services to FastAPI Server
+    AggDP -->|"ProcessedData"| FastAPI
+    HistDP -->|"ProcessedData"| FastAPI
+    SentAnalysis -->|"AggregatedOutput"| FastAPI
+    MLFactory -->|"AggregatedOutput"| FastAPI
+    EconCalService -->|"AggregatedOutput"| FastAPI
+    AlertsService -->|"AggregatedOutput"| FastAPI
+
+    %% FastAPI interactions with Infrastructure
+    FastAPI -->|"StoresQueriesData"| Database
+    FastAPI -->|"RealTimeCommunication"| WebSocket
+    FastAPI -->|"APIConsumption"| Frontend
+
+    %% DevOps integration (dashed lines)
+    DockerDeploy -.-> FastAPI
+    DockerDeploy -.-> Database
+    DockerDeploy -.-> WebSocket
+
+    %% Click Events
+    click ExternalDS "https://github.com/davidshch/macromind/blob/main/backend/src/api/routes/market_data.py"
+    click AggDP "https://github.com/davidshch/macromind/blob/main/backend/src/services/market_data.py"
+    click HistDP "https://github.com/davidshch/macromind/blob/main/backend/src/services/historical_data.py"
+    click SentRoute "https://github.com/davidshch/macromind/blob/main/backend/src/api/routes/sentiment.py"
+    click SentPipe "https://github.com/davidshch/macromind/blob/main/backend/src/services/ai/sentiment_pipeline.py"
+    click SentAnalysis "https://github.com/davidshch/macromind/blob/main/backend/src/services/sentiment_analysis.py"
+    click VolatilityRoute "https://github.com/davidshch/macromind/blob/main/backend/src/api/routes/volatility.py"
+    click VolService "https://github.com/davidshch/macromind/blob/main/backend/src/services/volatility.py"
+    click MLFactory "https://github.com/davidshch/macromind/blob/main/backend/src/services/ml/model_factory.py"
+    click EconCalRoute "https://github.com/davidshch/macromind/blob/main/backend/src/api/routes/economic_calendar.py"
+    click AlertsRoute "https://github.com/davidshch/macromind/blob/main/backend/src/api/routes/alerts.py"
+    click EconCalService "https://github.com/davidshch/macromind/blob/main/backend/src/services/economic_calendar.py"
+    click AlertsService "https://github.com/davidshch/macromind/blob/main/backend/src/services/alerts.py"
+    click FastAPI "https://github.com/davidshch/macromind/blob/main/backend/src/main.py"
+    click Database "https://github.com/davidshch/macromind/blob/main/backend/src/database/database.py"
+    click WebSocket "https://github.com/davidshch/macromind/blob/main/backend/src/services/websocket.py"
+    click DockerDeploy "https://github.com/davidshch/macromind/tree/main/backend/Dockerfile"
+    click Frontend "https://github.com/davidshch/macromind/blob/main/frontend/README.md"
+
+    %% Styles
+    classDef external fill:#FFD700,stroke:#DAA520,stroke-width:2px;
+    classDef core fill:#ADD8E6,stroke:#6495ED,stroke-width:2px;
+    classDef api fill:#90EE90,stroke:#32CD32,stroke-width:2px;
+    classDef db fill:#FFB6C1,stroke:#FF69B4,stroke-width:2px;
+    classDef ws fill:#FFA07A,stroke:#FF4500,stroke-width:2px;
+    classDef devops fill:#D8BFD8,stroke:#DA70D6,stroke-width:2px;
+    classDef frontend fill:#E6E6FA,stroke:#B0C4DE,stroke-width:2px;
 ```
 
 ## Setup Instructions
