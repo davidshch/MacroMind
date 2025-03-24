@@ -1,8 +1,8 @@
-# MacroMind 📈🚀
+# 📈🚀 MacroMind
 
 Cutting-edge financial analytics platform and economic calendar combining AI-powered sentiment analysis with real-time market data.
 
-## Overview
+## 📋 Overview
 
 MacroMind helps traders and analysts make data-driven decisions by:
 - Analyzing market sentiment across multiple sources in real-time
@@ -10,14 +10,14 @@ MacroMind helps traders and analysts make data-driven decisions by:
 - Tracking economic events and their market impact
 - Providing institutional-grade technical analysis
 
-## Core Technology
+## ⚙️ Core Technology
 
 - **AI-Powered Analysis**: FinBERT (sentiment classification), XGBoost (volatility regression), and Prophet (time series forecasting)
 - **Real-Time Processing**: WebSocket streaming, efficient data aggregation
 - **Multi-Source Data**: Integration with major financial APIs and social platforms
 - **Advanced Analytics**: Technical indicators, sentiment correlation, market impact prediction
 
-## Key Features
+## 🔑 Key Features
 
 🔹 **Market Intelligence**
 - Real-time sentiment analysis
@@ -29,7 +29,7 @@ MacroMind helps traders and analysts make data-driven decisions by:
 - Market trend analysis
 - Impact forecasting
 
-🔹 **Technical Stack**
+🔹 **Tech Stack**
 - Backend: FastAPI, PostgreSQL
 - ML: Hugging Face, XGBoost, Facebook Prophet
 - Data Sources: Alpha Vantage, Finnhub, News API, Reddit
@@ -82,25 +82,25 @@ MacroMind helps traders and analysts make data-driven decisions by:
 - Testing coverage expansion
 - Performance optimization
 
-📋 Planned:
+⌛ Planned:
 - Frontend development (Next.js)
 - Advanced AI features integration
 - Extended VIP capabilities
 - Mobile responsiveness
 - Additional data sources
 
-## Technical Documentation
+## 📂 Documentation
 
 - [API Reference](./API_DOCUMENTATION.md)
 
-## Security and Performance
+## 🔒 Security and Performance
 
 - JWT authentication
 - Rate limiting
 - Async processing
 - Efficient caching
 
-## Architecture
+## ↪️ Architecture
 
 ```mermaid
 flowchart TD
@@ -224,7 +224,7 @@ flowchart TD
     classDef frontend fill:#E6E6FA,stroke:#B0C4DE,stroke-width:2px;
 ```
 
-## Setup Instructions
+## 📝 Setup Instructions
 > Note: This project is currently in development. Core features are being implemented.
 
 The full setup guide will be available once the MVP is completed.
