@@ -1,0 +1,42 @@
+# Core FastAPI & Server
+fastapi
+uvicorn[standard]
+
+# Database & ORM
+sqlalchemy
+asyncpg
+psycopg2-binary
+alembic
+
+# Data Validation & Settings
+pydantic
+pydantic-settings
+python-dotenv
+
+# Authentication & Security
+passlib[bcrypt]
+python-jose[cryptography]
+
+# HTTP Clients
+requests
+aiohttp
+
+# External API Clients
+finnhub-python
+newsapi-python
+praw
+
+# Data Science & ML
+xgboost
+scikit-learn
+pandas
+numpy
+scipy
+
+# AI/LLM
+transformers[torch]
+torch
+langchain
+langchain-openai
+openai
+
