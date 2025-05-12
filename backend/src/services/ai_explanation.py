@@ -1,247 +1,212 @@
-"""AI-powered market analysis and explanation service using LangChain and OpenAI."""
+"""AI-powered market analysis and explanation service."""
 
 import logging
-from typing import Dict, Any, List, Optional
-from datetime import datetime, date
+from typing import Dict, Any, Optional, List
+from datetime import datetime, date, timedelta
 import asyncio
 import json
-from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema.output_parser import StrOutputParser
-from langchain.schema import SystemMessage, HumanMessage
 from fastapi import HTTPException, Depends
 
 from ..config import get_settings
-from .market_data import MarketDataService
-from .sentiment_analysis import SentimentAnalysisService
-from .volatility import VolatilityService
-from .economic_calendar import EconomicCalendarService
+from .market_data import MarketDataService # Keep for type hint
+from .sentiment_analysis import SentimentAnalysisService # Keep for type hint
+from .volatility import VolatilityService # Keep for type hint
+from .economic_calendar import EconomicCalendarService, get_economic_calendar_service # Keep for type hint and its own provider
+from .ml.model_factory import MLModelFactory, get_ml_model_factory
+
+# Import new centralized providers
+from ..core.dependencies import (
+    get_market_data_service, 
+    get_sentiment_service, 
+    get_volatility_service
+)
+
+from ..schemas.ai_explanation import AIExplanationRequest, AIExplanationResponse
 from ..schemas.sentiment import AggregatedSentimentResponse
 from ..schemas.volatility import VolatilityResponse
-from ..schemas.event import EventResponse
-from ..database.database import get_db
-from sqlalchemy.orm import Session
+from ..schemas.event import EventResponse as EconomicEventSchemaResponse
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-LLM_MODEL = "gpt-4o"
-
-EXPLANATION_PROMPT_TEMPLATE = """You are MacroMind AI, a sophisticated financial analyst AI. Your task is to provide a clear, concise, and insightful market explanation for the symbol {symbol} based on the provided data. Structure your response as a JSON object with the following keys: "explanation", "key_factors", "risk_assessment", "action_suggestions".
-
-**Input Data:**
-
-*   **Symbol:** {symbol}
-*   **Date:** {current_date}
-*   **Market Data:** {market_data_summary}
-*   **Aggregated Sentiment:** {sentiment_summary}
-*   **Volatility Analysis:** {volatility_summary}
-*   **Upcoming Economic Events:** {events_summary}
-
-**Instructions:**
-
-1.  **explanation:** Write a brief (3-5 sentences) narrative summarizing the current market situation for the symbol. Integrate price action, sentiment, and volatility.
-2.  **key_factors:** List the top 3-4 most significant factors currently influencing the symbol (e.g., "Strong bullish sentiment", "High volatility regime", "Upcoming CPI report").
-3.  **risk_assessment:** Provide a risk level (Low, Moderate-Low, Moderate, Moderate-High, High) based on the interplay of sentiment and volatility. Briefly justify the assessment.
-4.  **action_suggestions:** Offer 2-3 actionable insights or areas to monitor (e.g., "Consider risk management due to high volatility", "Monitor upcoming Fed meeting", "Look for confirmation of bullish trend").
-
-**Output Format:** Return ONLY the JSON object, with no other text before or after it.
-
-```json
-{{
-    "explanation": "<Your generated explanation>",
-    "key_factors": [
-        "<Factor 1>",
-        "<Factor 2>",
-        "<Factor 3>"
-    ],
-    "risk_assessment": "<Risk Level (e.g., Moderate)>: <Brief Justification>",
-    "action_suggestions": [
-        "<Suggestion 1>",
-        "<Suggestion 2>"
-    ]
-}}
-```
-"""
-
 class AIExplanationService:
-    """Generates market explanations using LangChain and an LLM."""
+    """Generates AI-driven explanations based on queries and context."""
 
     def __init__(self, 
+                 ml_model_factory: MLModelFactory = Depends(get_ml_model_factory),
                  market_service: MarketDataService = Depends(),
                  sentiment_service: SentimentAnalysisService = Depends(),
                  volatility_service: VolatilityService = Depends(),
                  calendar_service: EconomicCalendarService = Depends()
                  ):
-        """Initialize the service with dependencies and LangChain components."""
-        if not settings.openai_api_key:
-            logger.error("OpenAI API key not configured. AIExplanationService cannot function.")
-            raise ValueError("OpenAI API key is required for AIExplanationService.")
-        
+        """Initialize the service with dependencies."""
+        self.ml_model_factory = ml_model_factory
         self.market_service = market_service
         self.sentiment_service = sentiment_service
         self.volatility_service = volatility_service
         self.calendar_service = calendar_service
 
-        try:
-            self.llm = ChatOpenAI(temperature=0.3, model_name=LLM_MODEL, openai_api_key=settings.openai_api_key)
-        except Exception as e:
-            logger.error(f"Failed to initialize LangChain components: {e}")
-            raise RuntimeError("Could not initialize AI Explanation Service LLM.") from e
+        if not self.ml_model_factory.llm:
+            logger.error("MLModelFactory does not have an initialized LLM. AIExplanationService may not function fully.")
 
-    async def explain_market_conditions(self, symbol: str) -> Dict[str, Any]:
-        """
-        Generate a comprehensive market explanation using an LLM.
-
-        Args:
-            symbol: The stock or asset symbol.
-
-        Returns:
-            A dictionary containing the LLM-generated explanation, factors, risk,
-            and suggestions, plus data status.
-
-        Raises:
-            HTTPException: If data fetching or LLM generation fails.
-        """
-        logger.info(f"Generating LLM market explanation for symbol: {symbol}")
+    async def _gather_asset_context(self, symbol: str, lookback_days: int = 7) -> Dict[str, Any]:
+        """Gathers context for a specific asset symbol."""
+        context = {"symbol": symbol}
         try:
             market_data_task = self.market_service.get_stock_data(symbol)
             sentiment_task = self.sentiment_service.get_aggregated_sentiment(symbol, date.today())
             volatility_task = self.volatility_service.calculate_and_predict_volatility(symbol)
-            events_task = self.calendar_service.get_upcoming_events(days_ahead=7)
 
-            market_data, sentiment, volatility, all_events = await asyncio.gather(
-                market_data_task, sentiment_task, volatility_task, events_task,
+            results = await asyncio.gather(
+                market_data_task, sentiment_task, volatility_task,
                 return_exceptions=True
             )
-
-            market_data_summary = self._summarize_market_data(market_data)
-            sentiment_summary = self._summarize_sentiment(sentiment)
-            volatility_summary = self._summarize_volatility(volatility)
-            events_summary = self._summarize_events(all_events)
-
-            if isinstance(market_data, Exception) and isinstance(sentiment, Exception) and isinstance(volatility, Exception):
-                 logger.error(f"All data sources failed for {symbol}. Cannot generate explanation.")
-                 raise HTTPException(status_code=503, detail="Failed to fetch required data for explanation.")
-
-            prompt_content = EXPLANATION_PROMPT_TEMPLATE.format(
-                symbol=symbol,
-                current_date=date.today().isoformat(),
-                market_data_summary=market_data_summary,
-                sentiment_summary=sentiment_summary,
-                volatility_summary=volatility_summary,
-                events_summary=events_summary
-            )
             
-            messages = [
-                SystemMessage(content="You are MacroMind AI, a sophisticated financial analyst AI. Respond ONLY with the requested JSON object."),
-                HumanMessage(content=prompt_content)
-            ]
+            market_data, sentiment, volatility = results[0], results[1], results[2]
 
-            logger.debug(f"Invoking LLM for {symbol} explanation...")
-            response = await self.llm.ainvoke(messages)
-            response_str = response.content
-            logger.debug(f"LLM raw response for {symbol}: {response_str}")
+            if not isinstance(market_data, Exception) and market_data:
+                context["market_data"] = self._summarize_market_data(market_data)
+            if not isinstance(sentiment, Exception) and sentiment:
+                context["sentiment_data"] = self._summarize_sentiment(sentiment)
+            if not isinstance(volatility, Exception) and volatility:
+                context["volatility_data"] = self._summarize_volatility(volatility)
 
-            try:
-                if response_str.startswith("```json"):
-                    response_str = response_str.strip("` \njson")
-                explanation_json = json.loads(response_str)
-            except json.JSONDecodeError as json_err:
-                logger.error(f"Failed to parse LLM JSON response for {symbol}: {json_err}. Response: {response_str}")
-                raise HTTPException(status_code=500, detail="AI explanation generation failed (parsing error).")
-
-            return {
-                "symbol": symbol,
-                "timestamp": datetime.now().isoformat(),
-                **explanation_json,
-                "data_sources_status": {
-                    "market_data": "OK" if not isinstance(market_data, Exception) else "Failed",
-                    "sentiment": "OK" if not isinstance(sentiment, Exception) else "Failed",
-                    "volatility": "OK" if not isinstance(volatility, Exception) else "Failed",
-                    "events": "OK" if not isinstance(all_events, Exception) else "Failed"
-                }
-            }
-        except HTTPException as he:
-            raise he
         except Exception as e:
-            logger.exception(f"Error generating LLM explanation for {symbol}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Could not generate AI explanation for {symbol}.")
+            logger.error(f"Error gathering asset context for {symbol}: {e}", exc_info=True)
+        return context
+
+    async def _gather_event_context(self, event_id: int) -> Dict[str, Any]:
+        """Gathers context for a specific economic event."""
+        context = {"event_id": event_id}
+        try:
+            events = await self.calendar_service.get_economic_events(start_date=date.today() - timedelta(days=30), end_date=date.today() + timedelta(days=30))
+            target_event_model: Optional[EconomicEventSchemaResponse] = None
+            for ev_model in events:
+                if ev_model.id == event_id:
+                    target_event_model = ev_model
+                    break
+            
+            if target_event_model:
+                context["event_details"] = target_event_model.model_dump_json(indent=2)
+            else:
+                context["event_details"] = f"Event with ID {event_id} not found or details unavailable."
+
+        except Exception as e:
+            logger.error(f"Error gathering event context for event ID {event_id}: {e}", exc_info=True)
+        return context
+
+    async def generate_explanation(self, request: AIExplanationRequest) -> AIExplanationResponse:
+        """Generates an AI explanation based on the user's query and context parameters."""
+        logger.info(f"Generating AI explanation for query: '{request.query}' with params: {request.context_params}")
+
+        if not self.ml_model_factory.llm:
+            raise HTTPException(status_code=503, detail="AI Explanation Service is currently unavailable (LLM not configured).")
+
+        context_data: Dict[str, Any] = {"query_timestamp": datetime.now().isoformat()}
+        gathered_context_summary: Dict[str, Any] = {}
+
+        if request.context_params:
+            symbol = request.context_params.get("symbol")
+            event_id = request.context_params.get("event_id")
+
+            if symbol and isinstance(symbol, str):
+                logger.info(f"Gathering asset-specific context for symbol: {symbol}")
+                asset_context = await self._gather_asset_context(symbol)
+                context_data.update(asset_context)
+                gathered_context_summary["asset_context_for"] = symbol
+                gathered_context_summary.update(asset_context)
+
+            if event_id and isinstance(event_id, int):
+                logger.info(f"Gathering event-specific context for event_id: {event_id}")
+                event_context = await self._gather_event_context(event_id)
+                context_data.update(event_context)
+                gathered_context_summary["event_context_for"] = event_id
+                gathered_context_summary.update(event_context)
+        
+        if not gathered_context_summary:
+            gathered_context_summary["info"] = "No specific asset or event context provided; general query."
+
+        explanation_str = await self.ml_model_factory.generate_ai_explanation(
+            query=request.query,
+            context_data=context_data
+        )
+
+        if explanation_str.startswith("Error:"):
+            raise HTTPException(status_code=503, detail=explanation_str)
+
+        return AIExplanationResponse(
+            query=request.query,
+            explanation=explanation_str,
+            supporting_data_summary=gathered_context_summary,
+            generated_at=datetime.now()
+        )
 
     def _summarize_market_data(self, data: Optional[Dict | Exception]) -> str:
         if isinstance(data, Exception) or not data:
             return "Market data unavailable."
         try:
-            pd = data.get('price_data', {})
-            price = pd.get('current_price', 'N/A')
-            change = pd.get('change_percent', 'N/A')
-            vol = pd.get('volume', 'N/A')
-            summary = f"Price: {price}, Change: {change}%, Volume: {vol}."
-            metrics = data.get('metrics', {})
-            pe = metrics.get('pe_ratio', 'N/A')
-            beta = metrics.get('beta', 'N/A')
-            if pe != 'N/A' or beta != 'N/A':
-                summary += f" P/E: {pe}, Beta: {beta}."
+            price = data.get('current_price', 'N/A')
+            change_pct = data.get('change_percent', 'N/A')
+            volume = data.get('volume', 'N/A')
+            summary = f"Current Price: {price}, Change: {change_pct}%, Volume: {volume}."
             return summary
         except Exception as e:
-            logger.warning(f"Error summarizing market data: {e}")
+            logger.warning(f"Error summarizing market data: {e}", exc_info=True)
             return "Error summarizing market data."
 
     def _summarize_sentiment(self, data: Optional[AggregatedSentimentResponse | Exception]) -> str:
         if isinstance(data, Exception) or not data:
             return "Sentiment data unavailable."
         try:
-            return (f"Overall: {data.overall_sentiment.value}, Score: {data.normalized_score:.3f}. "
-                    f"Market Condition Context: {data.market_condition}. "
-                    f"Sources: {list(data.source_weights.keys())}.")
+            return (
+                f"Overall Sentiment: {data.overall_sentiment.value}, Score: {data.normalized_score:.3f}. "
+                f"News Score: {data.news_sentiment_score if data.news_sentiment_score is not None else 'N/A'}, "
+                f"Reddit Score: {data.reddit_sentiment_score if data.reddit_sentiment_score is not None else 'N/A'}. "
+                f"Benchmark: {data.benchmark}. Market Condition Context: {data.market_condition}."
+            )
         except Exception as e:
-            logger.warning(f"Error summarizing sentiment data: {e}")
+            logger.warning(f"Error summarizing sentiment data: {e}", exc_info=True)
             return "Error summarizing sentiment data."
 
-    def _summarize_volatility(self, data: Optional[VolatilityResponse | Exception]) -> str:
+    def _summarize_volatility(self, data: Optional[Dict | Exception]) -> str:
         if isinstance(data, Exception) or not data:
             return "Volatility data unavailable."
         try:
-            return (f"Current: {data.current_volatility:.4f}, Predicted: {data.predicted_volatility:.4f} "
-                    f"(Range: {data.prediction_range.low:.4f}-{data.prediction_range.high:.4f}). "
-                    f"Regime: {data.volatility_regime.value}, Trend: {data.trend}. "
-                    f"High Volatility: {data.is_high_volatility}.")
+            current_vol = data.get('current_volatility', 'N/A')
+            predicted_vol = data.get('predicted_volatility', 'N/A')
+            trend = data.get('trend', 'N/A')
+            conditions = data.get('market_conditions', 'N/A')
+            return (
+                f"Current Volatility: {current_vol:.4f}, Predicted: {predicted_vol:.4f}. "
+                f"Trend: {trend}. Market Conditions: {conditions}."
+            )
         except Exception as e:
-            logger.warning(f"Error summarizing volatility data: {e}")
+            logger.warning(f"Error summarizing volatility data: {e}", exc_info=True)
             return "Error summarizing volatility data."
 
-    def _summarize_events(self, data: Optional[List[EventResponse] | Exception]) -> str:
-        if isinstance(data, Exception):
-            return "Economic event data unavailable."
-        if not data:
-            return "No major relevant economic events found in the near term."
+    def _summarize_events(self, data: Optional[List[EconomicEventSchemaResponse] | Exception]) -> str:
+        if isinstance(data, Exception) or not data:
+            return "Economic events data unavailable."
         try:
-            summary = "Upcoming Events: "
-            event_strs = [f"{e.name} ({e.date.strftime('%Y-%m-%d') if e.date else 'N/A'}, Impact: {e.impact or 'N/A'})" for e in data[:3]]
-            return summary + "; ".join(event_strs) + "."
+            if not data:
+                return "No notable upcoming economic events."
+            summary_parts = []
+            for event in data[:3]:
+                summary_parts.append(f"{event.name} on {event.date.strftime('%Y-%m-%d')} (Impact: {event.impact}, AI Score: {event.impact_score or 'N/A'}).")
+            return " Upcoming Events: " + " ".join(summary_parts)
         except Exception as e:
-            logger.warning(f"Error summarizing event data: {e}")
-            return "Error summarizing event data."
-
-def get_market_data_service() -> MarketDataService:
-    return MarketDataService()
-
-def get_volatility_service() -> VolatilityService:
-    return VolatilityService()
-
-def get_economic_calendar_service(db: Session = Depends(get_db)) -> EconomicCalendarService:
-    return EconomicCalendarService(db=db)
-
-def get_sentiment_analysis_service(db: Session = Depends(get_db)) -> SentimentAnalysisService:
-    return SentimentAnalysisService(db=db)
+            logger.warning(f"Error summarizing economic events: {e}", exc_info=True)
+            return "Error summarizing events data."
 
 def get_ai_explanation_service(
+    ml_model_factory: MLModelFactory = Depends(get_ml_model_factory),
     market_service: MarketDataService = Depends(get_market_data_service),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_analysis_service),
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
     volatility_service: VolatilityService = Depends(get_volatility_service),
-    calendar_service: EconomicCalendarService = Depends(get_economic_calendar_service)
+    calendar_service: EconomicCalendarService = Depends(get_economic_calendar_service) 
 ) -> AIExplanationService:
     return AIExplanationService(
+        ml_model_factory=ml_model_factory,
         market_service=market_service,
         sentiment_service=sentiment_service,
         volatility_service=volatility_service,

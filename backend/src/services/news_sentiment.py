@@ -2,26 +2,32 @@
 
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import asyncio
 import time
+import hashlib
 from newsapi import NewsApiClient
+from sqlalchemy.orm import Session
+from fastapi import Depends
 
 from ..config import get_settings
 from .base_sentiment import BaseSentimentAnalyzer
+from ..database.models import RawSentimentAnalysis
+from ..database.database import get_db
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Simple in-memory cache for news results
 _news_cache = {}
-_news_cache_expiry_seconds = 3600 * 4 # Cache news for 4 hours
+_news_cache_expiry_seconds = 3600 * 1  # Cache news for 1 hour
 
 class NewsSentimentService(BaseSentimentAnalyzer):
-    """Fetches news articles and analyzes their sentiment."""
+    """Fetches news articles, analyzes their sentiment, and stores raw analysis."""
 
-    def __init__(self):
-        super().__init__() # Initializes the sentiment analyzer (FinBERT)
+    def __init__(self, db: Session = Depends(get_db)):
+        super().__init__()  # Initializes the sentiment analyzer (FinBERT)
+        self.db = db  # Store DB session
         if not settings.news_api_key:
             logger.warning("NewsAPI key not configured. NewsSentimentService will return empty results.")
             self.newsapi = None
@@ -31,86 +37,125 @@ class NewsSentimentService(BaseSentimentAnalyzer):
             except Exception as e:
                 logger.error(f"Failed to initialize NewsApiClient: {e}")
                 self.newsapi = None
-        self.request_delay = 1 # Basic delay between API calls if needed
+        self.request_delay = 1  # Basic delay between API calls if needed
         self.last_request_time = 0
+
+    def _generate_content_hash(self, text_content: str) -> str:
+        """Generates an SHA256 hash for a given text content."""
+        return hashlib.sha256(text_content.encode('utf-8')).hexdigest()
+
+    async def _store_raw_analysis(self, symbol: Optional[str], article_data: Dict, sentiment_result: Dict):
+        """Stores the raw sentiment analysis of a single article into the database."""
+        if "error" in sentiment_result or not sentiment_result.get("all_scores"):
+            logger.warning(f"Skipping DB storage for article due to sentiment analysis error or missing scores: {article_data.get('title')}")
+            return
+
+        text_to_analyze = f"{article_data.get('title', '')}. {article_data.get('description', '') or article_data.get('content', '')}"
+        content_hash = self._generate_content_hash(text_to_analyze)
+
+        try:
+            loop = asyncio.get_event_loop()
+            existing_analysis = await loop.run_in_executor(None, 
+                lambda: self.db.query(RawSentimentAnalysis).filter_by(text_content_hash=content_hash).first()
+            )
+            if existing_analysis:
+                logger.debug(f"Raw analysis for content hash {content_hash} already exists. Skipping storage.")
+                return
+        except Exception as e:
+            logger.error(f"Error checking for existing raw analysis (hash: {content_hash}): {e}", exc_info=True)
+
+        source_created_at_str = article_data.get('publishedAt')
+        source_created_at_dt = None
+        if source_created_at_str:
+            try:
+                source_created_at_dt = datetime.fromisoformat(source_created_at_str.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning(f"Could not parse article publishedAt date: {source_created_at_str}")
+
+        raw_analysis_entry = RawSentimentAnalysis(
+            symbol=symbol,
+            text_content_hash=content_hash,
+            text_content=text_to_analyze,
+            source="NewsAPI_" + (article_data.get('source', {}).get('id') or article_data.get('source', {}).get('name', 'unknown')).replace(" ", "_"),
+            sentiment_label=sentiment_result["primary_sentiment"],
+            sentiment_score=sentiment_result["primary_confidence"],
+            all_scores=sentiment_result["all_scores"],
+            analyzed_at=datetime.utcnow(),
+            source_created_at=source_created_at_dt
+        )
+        try:
+            self.db.add(raw_analysis_entry)
+            await loop.run_in_executor(None, self.db.commit)
+            logger.debug(f"Stored raw news analysis for: {article_data.get('title')[:50]}...")
+        except Exception as e:
+            logger.error(f"DB Error storing raw news analysis for '{article_data.get('title')[:50]}...': {e}", exc_info=True)
+            await loop.run_in_executor(None, self.db.rollback)
 
     async def get_news_sentiment(self, symbol: str, company_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Get aggregated sentiment from recent news articles related to a symbol.
-
-        Args:
-            symbol: The stock symbol (e.g., AAPL).
-            company_name: The full company name for better search results (e.g., Apple Inc).
-
-        Returns:
-            A dictionary containing aggregated sentiment, confidence, article count,
-            and top articles.
+        Also stores individual article analyses.
         """
         if not self.newsapi:
             return self._create_empty_sentiment(symbol, "newsapi_key_missing")
 
-        cache_key = f"news_sentiment:{symbol}"
+        cache_key = f"news_sentiment_agg_v2:{symbol}"
         cached_data = self._get_cached_news(cache_key)
         if cached_data:
-            logger.info(f"Returning cached news sentiment for {symbol}")
+            logger.info(f"Returning cached aggregated news sentiment for {symbol}")
             return cached_data
 
         try:
             query = self._build_query(symbol, company_name)
             logger.info(f"Fetching news for query: '{query}'")
-
-            # Respect rate limits (basic)
             await self._respect_rate_limit()
-
-            # Fetch news articles from the last 7 days
             to_date = datetime.now()
             from_date = to_date - timedelta(days=7)
 
-            # Use asyncio.to_thread for the synchronous NewsAPI client call
             articles_response = await asyncio.to_thread(
                 self.newsapi.get_everything,
-                q=query,
-                language='en',
-                sort_by='relevancy', # Prioritize relevant articles
+                q=query, language='en', sort_by='relevancy',
                 from_param=from_date.strftime('%Y-%m-%d'),
-                to=to_date.strftime('%Y-%m-%d'),
-                page_size=20 # Limit to recent relevant articles
+                to=to_date.strftime('%Y-%m-%d'), page_size=20
             )
-
             self.last_request_time = time.time()
 
             if articles_response['status'] != 'ok' or not articles_response['articles']:
-                logger.warning(f"No news articles found for {symbol} or API error.")
                 return self._create_empty_sentiment(symbol, "no_articles_found")
 
             articles = articles_response['articles']
+            processed_sentiments_for_aggregation = []
+            storage_tasks = []
 
-            # Analyze sentiment for each article (concurrently)
-            sentiment_tasks = [
-                self.analyze_text(f"{article.get('title', '')}. {article.get('description', '') or article.get('content', '')}")
-                for article in articles if article.get('title') # Ensure there is content
-            ]
-            sentiments = await asyncio.gather(*sentiment_tasks)
+            for article in articles:
+                title = article.get('title')
+                content_preview = article.get('description', '') or article.get('content', '')
+                if not title and not content_preview:
+                    continue
+                text_to_analyze = f"{title}. {content_preview}"
+                
+                sentiment_result = await self.ml_model_factory.analyze_sentiment(text_to_analyze)
+                
+                if "error" not in sentiment_result:
+                    processed_sentiments_for_aggregation.append(sentiment_result)
+                    storage_tasks.append(self._store_raw_analysis(symbol, article, sentiment_result))
+                else:
+                    logger.warning(f"Sentiment analysis failed for article: {title}")
+            
+            if storage_tasks:
+                await asyncio.gather(*storage_tasks, return_exceptions=True)
 
-            # Aggregate results
-            aggregated_result = self._aggregate_news_sentiment(symbol, articles, sentiments)
-
-            # Cache the result
+            aggregated_result = self._aggregate_news_sentiment(symbol, articles, processed_sentiments_for_aggregation)
             self._cache_news(cache_key, aggregated_result)
-
             return aggregated_result
 
         except Exception as e:
-            logger.error(f"Error fetching or analyzing news sentiment for {symbol}: {e}")
-            # Return empty sentiment on error
-            return self._create_empty_sentiment(symbol, f"error: {e}")
+            logger.error(f"Error in get_news_sentiment for {symbol}: {e}", exc_info=True)
+            return self._create_empty_sentiment(symbol, f"error: {str(e)}")
 
     def _build_query(self, symbol: str, company_name: Optional[str] = None) -> str:
         """Build a search query for NewsAPI."""
-        # Prefer company name if available, otherwise use symbol
-        # Add terms to focus on financial/market context
         if company_name:
-            # Use exact phrase matching for company name if it contains spaces
             query_term = f'"{company_name}"' if ' ' in company_name else company_name
             query = f'({query_term} OR {symbol}) AND (stock OR market OR finance OR business)'
         else:
@@ -151,17 +196,13 @@ class NewsSentimentService(BaseSentimentAnalyzer):
             else:
                 sentiment_counts["neutral"] += 1
             
-            # Simple aggregation: average score weighted by confidence
-            weight = sentiment['confidence'] # Use confidence as weight
+            weight = sentiment['confidence']
             weighted_score_sum += score * weight
             total_weight += weight
-            total_score += score # For simple average calculation
+            total_score += score
 
-        # Calculate normalized score (-1 to 1)
-        # Use weighted average if weights are significant, otherwise simple average
         normalized_score = (weighted_score_sum / total_weight) if total_weight > 0.1 else (total_score / len(valid_sentiments))
 
-        # Determine overall sentiment label
         if normalized_score > 0.15:
             overall_sentiment = "bullish"
         elif normalized_score < -0.15:
@@ -169,13 +210,11 @@ class NewsSentimentService(BaseSentimentAnalyzer):
         else:
             overall_sentiment = "neutral"
 
-        # Calculate overall confidence (average confidence of individual analyses)
         avg_confidence = sum(s['confidence'] for s in valid_sentiments) / len(valid_sentiments)
 
-        # Prepare top articles list
         top_articles_data = []
         for i, article in enumerate(articles):
-             if i < len(valid_sentiments): # Ensure index is valid
+             if i < len(valid_sentiments):
                  sentiment = valid_sentiments[i]
                  top_articles_data.append({
                      "title": article.get('title'),
@@ -185,7 +224,6 @@ class NewsSentimentService(BaseSentimentAnalyzer):
                      "sentiment": sentiment['sentiment'],
                      "confidence": sentiment['confidence']
                  })
-        # Sort top articles by confidence (descending)
         top_articles_data.sort(key=lambda x: x['confidence'], reverse=True)
 
         return {
@@ -195,7 +233,7 @@ class NewsSentimentService(BaseSentimentAnalyzer):
             "confidence": round(avg_confidence, 3),
             "article_count": len(valid_sentiments),
             "sentiment_distribution": sentiment_counts,
-            "top_articles": top_articles_data[:5], # Return top 5 articles
+            "top_articles": top_articles_data[:5],
             "last_updated": datetime.now().isoformat(),
             "source": "newsapi"
         }
@@ -216,7 +254,6 @@ class NewsSentimentService(BaseSentimentAnalyzer):
             "status": f"No data ({reason})"
         }
 
-    # --- Caching --- 
     def _get_cached_news(self, cache_key: str) -> Optional[Dict[str, Any]]:
         """Get news data from in-memory cache if not expired."""
         if cache_key in _news_cache:

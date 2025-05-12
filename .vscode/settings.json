@@ -22,5 +22,8 @@
             "text": "Generate unit tests that: - Use pytest for backend tests. - Use Jest and React Testing Library for frontend tests. - Follow the AAA (Arrange-Act-Assert) pattern. - Test both expected behavior and edge cases. - Ensure FastAPI endpoints return expected JSON responses with correct status codes. - For database queries, mock database interactions using pytest fixtures. - Use snapshot testing for React components where applicable."
         }
     ],
-    "python.analysis.extraPaths": ["./backend/src"]
+    "python.analysis.extraPaths": [
+        "./backend/src"
+    ],
+    "python.analysis.autoImportCompletions": true
 }

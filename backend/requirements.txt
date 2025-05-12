@@ -32,6 +32,7 @@ scikit-learn
 pandas
 numpy
 scipy
+joblib # Added for saving/loading ML models
 
 # AI/LLM
 transformers[torch]
@@ -40,3 +41,4 @@ langchain
 langchain-openai
 openai
 
+apscheduler

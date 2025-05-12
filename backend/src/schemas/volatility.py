@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 
 class VolatilityRegime(str, Enum):
@@ -61,3 +61,17 @@ class HistoricalVolatility(BaseModel):
     value: float
     regime: VolatilityRegime
     percentile: float
+
+class TrainVolatilityModelRequest(BaseModel):
+    """Request model for training a volatility model for a specific symbol."""
+    symbol: str = Field(..., description="The stock/asset symbol for which to train the model.")
+    training_start_date_str: str = Field(..., description="Start date for training data (YYYY-MM-DD).")
+    training_end_date_str: str = Field(..., description="End date for training data (YYYY-MM-DD).")
+    future_vol_period_days: int = Field(5, ge=1, le=30, description="Number of future days to predict volatility for (target variable).")
+
+class TrainVolatilityModelResponse(BaseModel):
+    """Response model for the volatility model training status."""
+    status: str = Field(..., description="Status of the training job (e.g., 'success', 'error').")
+    message: str = Field(..., description="A message detailing the outcome of the training.")
+    model_path: Optional[str] = Field(None, description="Path where the trained model is saved, if successful.")
+    features_used: Optional[List[str]] = Field(None, description="List of features used for training, if successful.")

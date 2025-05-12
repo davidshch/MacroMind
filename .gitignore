@@ -173,3 +173,7 @@ cython_debug/
 .pypirc
 PROJECT_CONTEXT.md
 .DS_Store
+
+.vscode/
+# VS Code settings
+.vscode/settings.json

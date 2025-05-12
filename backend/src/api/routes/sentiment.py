@@ -9,25 +9,32 @@ to generate comprehensive sentiment analysis for financial instruments.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 
-from ..schemas.sentiment import (
+from ...schemas.sentiment import (
     AggregatedSentimentResponse,
     TextAnalysisRequest,
-    TextAnalysisResponse
+    TextAnalysisResponse,
+    SentimentInsightResponse,
+    SentimentSpikeResponse
 )
-from ..services.sentiment_analysis import SentimentAnalysisService, get_sentiment_analysis_service
-from ..database.database import get_db
-from ..services.auth import get_current_active_user
-from ..database.models import User
+from ...services.sentiment_analysis import SentimentAnalysisService
+from ...database.database import get_db
+from ...services.auth import get_current_active_user
+from ...database.models import User
+from ...services.ml.model_factory import MLModelFactory
 
 router = APIRouter(prefix="/api/sentiment", tags=["sentiment"])
+
+async def get_sentiment_service(db: Session = Depends(get_db), ml_factory: MLModelFactory = Depends(MLModelFactory)) -> SentimentAnalysisService:
+    """Dependency provider for SentimentAnalysisService."""
+    return SentimentAnalysisService(db=db, ml_model_factory=ml_factory)
 
 @router.get("/{symbol}", response_model=AggregatedSentimentResponse)
 async def get_aggregated_sentiment_endpoint(
     symbol: str,
     target_date: Optional[date] = Query(None, description="Target date (YYYY-MM-DD). Defaults to today."),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_analysis_service),
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
     current_user: User = Depends(get_current_active_user)
 ):
     """Get aggregated market sentiment for a symbol on a specific date."""
@@ -48,14 +55,13 @@ async def get_aggregated_sentiment_endpoint(
 async def analyze_text_endpoint(
     request: TextAnalysisRequest,
     current_user: User = Depends(get_current_active_user),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_analysis_service)
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service)
 ):
     """Analyze sentiment of a provided text snippet using the base analyzer."""
     try:
         result = await sentiment_service.analyze_text(request.text)
         if 'timestamp' not in result:
-             from datetime import datetime
-             result['timestamp'] = datetime.now().isoformat()
+            result['timestamp'] = datetime.now().isoformat()
         return result
     except HTTPException as he:
         raise he
@@ -64,6 +70,64 @@ async def analyze_text_endpoint(
         logger = logging.getLogger(__name__)
         logger.exception(f"Error analyzing text: {e}")
         raise HTTPException(status_code=500, detail="Failed to analyze text sentiment.")
+
+@router.get("/{symbol}/insights", response_model=SentimentInsightResponse)
+async def get_sentiment_insights_endpoint(
+    symbol: str,
+    lookback_days: int = Query(7, ge=1, le=30, description="Number of past days of sentiment data to analyze."),
+    num_themes: int = Query(3, ge=1, le=5, description="Number of key themes to extract."),
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get AI-distilled sentiment insights (key themes and summary) for a symbol."""
+    try:
+        insights_result = await sentiment_service.get_distilled_sentiment_insights(
+            symbol=symbol, 
+            lookback_days=lookback_days, 
+            num_themes=num_themes
+        )
+        
+        if "error" in insights_result:
+            raise HTTPException(status_code=400, detail=str(insights_result["error"]))
+        
+        return SentimentInsightResponse(
+            themes=insights_result.get("themes", []),
+            summary=insights_result.get("summary", "No summary available."),
+            asset_symbol=symbol,
+            lookback_days=lookback_days,
+            timestamp=datetime.now()
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Error getting sentiment insights for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sentiment insights.")
+
+@router.get("/{symbol}/spikes", response_model=SentimentSpikeResponse)
+async def get_sentiment_spikes(
+    symbol: str,
+    lookback_days: int = Query(90, ge=30, le=365, description="Historical window for spike detection."),
+    min_data_points: int = Query(30, ge=10, description="Minimum data points required."),
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Detect unusual spikes or drops in sentiment for a symbol."""
+    try:
+        spike_data = await sentiment_service.detect_sentiment_spikes(
+            symbol=symbol, 
+            lookback_days=lookback_days,
+            min_data_points=min_data_points
+        )
+        return SentimentSpikeResponse.model_validate(spike_data)
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Unexpected error detecting sentiment spikes for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to detect sentiment spikes.")
 
 # Potential future endpoints:
 # - Get historical aggregated sentiment

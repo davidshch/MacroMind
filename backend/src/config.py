@@ -9,12 +9,20 @@ class Settings(BaseSettings):
     api_key_alpha_vantage: str = "demo"
     finnhub_api_key: str = "demo"
     api_key_news: Optional[str] = None
+    openai_api_key: Optional[str] = None # Added for LLM integration
     jwt_secret: str = "test_secret"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
     use_demo_data: bool = True
+
+    # AI/ML Model related paths
+    default_volatility_model_path: str = "src/services/ml/trained_models/default_xgboost_volatility_model.joblib"
+
+    # Opportunity Highlighter Thresholds
+    OPPORTUNITY_VOLATILITY_THRESHOLD: float = 0.02 # Example: 2% daily volatility
+    OPPORTUNITY_SENTIMENT_THRESHOLD: float = 0.5  # Example: score > 0.5 or < -0.5
 
     model_config = SettingsConfigDict(
         env_file=".env",

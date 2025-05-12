@@ -140,12 +140,36 @@ class Alert(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String, nullable=True) # Added name field
     symbol = Column(String)
-    alert_type = Column(String)  # price, volatility, sentiment
-    condition = Column(JSON)
-    created_at = Column(DateTime, default=datetime.now())
+    conditions = Column(JSON) # Stores the AlertConditions schema
+    created_at = Column(DateTime, default=datetime.utcnow) # Changed to utcnow for consistency
     is_active = Column(Boolean, default=True)
-    last_checked = Column(DateTime)
-    last_triggered = Column(DateTime, nullable=True)
+    last_triggered_at = Column(DateTime, nullable=True) # Renamed from last_triggered
 
     user = relationship("User", back_populates="alerts")
+
+class RawSentimentAnalysis(Base):
+    """
+    Stores individual sentiment analysis results from FinBERT for raw texts.
+    Used by Insight Distiller and potentially for fine-tuning.
+    """
+    __tablename__ = "raw_sentiment_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True, nullable=True) # Symbol might not always be directly applicable to any text
+    text_content_hash = Column(String, index=True, unique=True) # To avoid duplicate processing of same text
+    text_content = Column(String)
+    source = Column(String, index=True) # e.g., "NewsAPI", "Reddit_PostTitle", "Reddit_Comment"
+    sentiment_label = Column(String) # e.g., "positive", "negative", "neutral" from FinBERT
+    sentiment_score = Column(Float)  # Confidence for the primary label
+    all_scores = Column(JSON, nullable=True) # Stores all scores from FinBERT if available
+    analyzed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    source_created_at = Column(DateTime, nullable=True, index=True) # Original timestamp of the news/post
+    # Optional: link to a parent economic event or a specific news article ID
+    # economic_event_id = Column(Integer, ForeignKey("economic_events.id"), nullable=True)
+    # news_article_id = Column(String, nullable=True, index=True) # If we have unique IDs for news
+
+    __table_args__ = (
+        Index('idx_raw_sentiment_symbol_source_created', 'symbol', 'source', 'source_created_at'),
+    )
