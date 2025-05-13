@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
+    log_level: str = "INFO"
     use_demo_data: bool = True
 
     # AI/ML Model related paths
