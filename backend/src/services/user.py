@@ -1,14 +1,16 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..database.models import User
 from .auth import get_password_hash
 from datetime import datetime
 from typing import Optional
 
 class UserService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
-    def create_user(self, email: str, password: str) -> User:
+    async def create_user(self, email: str, password: str) -> User:
         hashed_password = get_password_hash(password)
         user = User(
             email=email,
@@ -16,20 +18,23 @@ class UserService:
             created_at=datetime.utcnow()
         )
         self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
+        await self.db.commit()
+        await self.db.refresh(user)
         return user
 
-    def get_user_by_email(self, email: str) -> User:
-        return self.db.query(User).filter(User.email == email).first()
+    async def get_user_by_email(self, email: str) -> Optional[User]:
+        result = await self.db.execute(
+            select(User).filter(User.email == email)
+        )
+        return result.scalar_one_or_none()
 
-    def update_vip_status(self, email: str, is_vip: bool) -> User:
+    async def update_vip_status(self, email: str, is_vip: bool) -> User:
         """Update user's VIP status."""
-        user = self.get_user_by_email(email)
+        user = await self.get_user_by_email(email)
         if not user:
             raise ValueError(f"User with email {email} not found")
         
         user.is_vip = is_vip
-        self.db.commit()
-        self.db.refresh(user)
+        await self.db.commit()
+        await self.db.refresh(user)
         return user

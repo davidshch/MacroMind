@@ -12,7 +12,7 @@ from ...services.sector_fundamentals import SectorFundamentalsService, SECTOR_ET
 from ...schemas.sector import SectorFundamentalResponse # Added
 from datetime import date
 
-router = APIRouter(prefix="/api/market", tags=["market"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.get("/stock/{symbol}", response_model=Dict[str, Any])
@@ -20,11 +20,16 @@ async def get_stock_data(
     symbol: str,
     current_user: User = Depends(get_current_user)
 ):
+    """Get stock data for a given symbol."""
+    logger.debug(f"Received request for stock data: {symbol}")
     try:
         market_service = MarketDataService()
+        logger.debug("MarketDataService initialized")
         data = await market_service.get_stock_data(symbol)
+        logger.debug(f"Stock data retrieved for symbol {symbol}: {data}")
         return data
     except Exception as e:
+        logger.error(f"Error getting stock data for symbol {symbol}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/profile/{symbol}")

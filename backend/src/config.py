@@ -39,3 +39,5 @@ def get_settings() -> Settings:
     except Exception as e:
         logging.getLogger(__name__).error(f"Error loading settings: {e}")
         raise ValueError(f"Could not load application settings: {e}")
+
+settings = get_settings()

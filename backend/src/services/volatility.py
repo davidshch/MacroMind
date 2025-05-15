@@ -18,7 +18,7 @@ from ..database.models import MarketSentiment
 from .market_data import MarketDataService
 from .ml.model_factory import MLModelFactory
 from ..schemas.volatility import VolatilityRegime
-from ..core.dependencies import get_market_data_service, get_ml_model_factory
+from ..core.service_providers import get_market_data_service, get_ml_model_factory
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +95,9 @@ class VolatilityService:
         Prepares a comprehensive feature DataFrame for a given symbol up to end_date.
         Features include historical volatility, VIX, sentiment, and technical indicators.
         """
-        fetch_start_date = end_date - timedelta(days=data_fetch_lookback_days + 90)
+        fetch_start_date = pd.Timestamp(end_date) - pd.Timedelta(days=data_fetch_lookback_days + 90)
 
+        logger.debug(f"Fetching price data for {symbol} from {fetch_start_date} to {end_date}")
         price_data_list = await self.market_data_service.get_historical_prices(symbol, data_fetch_lookback_days + 90)
         if not price_data_list:
             logger.warning(f"No price data for {symbol}")
@@ -106,12 +107,14 @@ class VolatilityService:
         df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date').sort_index()
         df = df[~df.index.duplicated(keep='first')]
-        df = df[(df.index >= pd.to_datetime(fetch_start_date)) & (df.index <= pd.to_datetime(end_date))]
+        df = df[(df.index >= pd.Timestamp(fetch_start_date)) & (df.index <= pd.Timestamp(end_date))]
 
+        # Add technical indicators
         df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
         for window in [5, 10, 20, 60]:
-            df[f'historical_vol_{window}d'] = df['log_returns'].rolling(window=window, min_periods=max(1,window//2)).std() * np.sqrt(252)
+            df[f'historical_vol_{window}d'] = df['log_returns'].rolling(window=window, min_periods=max(1, window // 2)).std() * np.sqrt(252)
 
+        # Fetch VIX data
         vix_data_list = await self.market_data_service.get_historical_prices('^VIX', data_fetch_lookback_days + 90)
         if vix_data_list:
             df_vix = pd.DataFrame(vix_data_list)
@@ -123,6 +126,7 @@ class VolatilityService:
             logger.warning("No VIX data found, filling with NaN.")
             df['vix_close'] = np.nan
 
+        # Fetch sentiment data
         sentiment_df = await self._fetch_historical_sentiment_df(symbol, fetch_start_date.date(), end_date.date())
         if not sentiment_df.empty:
             df = df.merge(sentiment_df, left_index=True, right_index=True, how='left')
@@ -130,21 +134,8 @@ class VolatilityService:
         else:
             logger.warning(f"No sentiment data for {symbol}, filling with 0.")
             df['sentiment_score'] = 0.0
-        
-        min_data_for_ti = 20
-        if len(df) >= min_data_for_ti:
-            df['rsi_14d'] = self._calculate_rsi(df['close'], period=14)
-            if 'high' in df.columns and 'low' in df.columns:
-                 df['atr_14d'] = self._calculate_atr(df[['high', 'low', 'close']].copy(), period=14)
-            else:
-                 df['atr_14d'] = np.nan
-            df['bb_width_20d'] = self._calculate_bollinger_bandwidth(df['close'], window=20)
-        else:
-            logger.warning(f"Not enough data ({len(df)} points) for full TI calculation for {symbol}.")
-            df['rsi_14d'] = 50.0
-            df['atr_14d'] = df['log_returns'].rolling(window=14).std().mean() if not df['log_returns'].dropna().empty else 0.01
-            df['bb_width_20d'] = 0.05
 
+        # Finalize DataFrame
         df = df.ffill().bfill()
         df.dropna(inplace=True)
 
@@ -351,6 +342,7 @@ class VolatilityService:
         self,
         symbol: str,
         lookback_days: int = 30,
+        prediction_days: int = 5,
     ) -> Dict[str, Any]:
         """Calculate current volatility metrics and predict future volatility using MLModelFactory."""
         try:
@@ -563,6 +555,49 @@ class VolatilityService:
         try:
             self.redis.setex(key, self.cache_duration.seconds, json.dumps(data))
         except Exception as e: logger.error(f"Redis SETEX error: {e}")
+        
+    async def get_historical_volatility(
+        self,
+        symbol: str,
+        days: int = 90,
+    ) -> List[Dict[str, Any]]:
+        """Get historical volatility data with regime classifications."""
+        try:
+            features_df = await self._prepare_comprehensive_features_df(
+                symbol,
+                datetime.now(),
+                data_fetch_lookback_days=days
+            )
+
+            if features_df.empty:
+                logger.warning(f"No historical data found for {symbol}")
+                return []
+
+            result = []
+            for idx, row in features_df.iterrows():
+                regime = self._detect_volatility_regime(
+                    features_df[features_df.index <= idx]
+                )
+                
+                vol_value = row['historical_vol_10d']
+                vol_series = features_df['historical_vol_10d'][:idx+1]
+                percentile = float(percentileofscore(vol_series, vol_value) if len(vol_series) > 1 else 50.0)
+                
+                result.append({
+                    "date": idx.isoformat(),
+                    "value": float(vol_value),
+                    "regime": regime,
+                    "percentile": percentile
+                })
+
+            return result
+
+        except Exception as e:
+            logger.exception(f"Error getting historical volatility for {symbol}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to retrieve historical volatility: {str(e)}"
+            )
 
 async def get_volatility_service(
     db: AsyncSession = Depends(get_db),

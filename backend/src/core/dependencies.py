@@ -8,7 +8,7 @@ from typing import Optional
 from ..database.database import get_db
 from ..services.ml.model_factory import MLModelFactory
 from ..services.market_data import MarketDataService
-from ..services.sentiment_analysis import SentimentAnalysisService
+from .service_providers import get_market_data_service, get_ml_model_factory
 from ..services.volatility import VolatilityService
 from ..services.economic_calendar import EconomicCalendarService
 

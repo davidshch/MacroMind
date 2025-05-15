@@ -1,8 +1,9 @@
 """Service for aggregating sentiment from multiple sources."""
 
-import logging
-from typing import Dict, Any, Optional, List
+from __future__ import annotations
+from typing import TYPE_CHECKING, Dict, Any, Optional, List
 from datetime import date, datetime, timedelta
+import logging
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, func, exc as sqlalchemy_exc
@@ -11,18 +12,18 @@ import pandas as pd
 import numpy as np
 from fastapi import HTTPException, Depends
 
+from ..database.models import MarketSentiment, SentimentType, RawSentimentAnalysis
+from ..schemas.sentiment import SentimentCreate, VolatilityContext
+from ..schemas.volatility import VolatilityRegime
+from ..config import get_settings
 from .base_sentiment import BaseSentimentAnalyzer
 from .social_sentiment import SocialSentimentService
 from .news_sentiment import NewsSentimentService
-from .volatility import VolatilityService
-from ..database.models import AggregatedSentiment, SentimentType, RawSentimentAnalysis
-from ..schemas.sentiment import AggregatedSentimentResponse, SentimentCreate, VolatilityContext
-from ..schemas.volatility import VolatilityRegime
-from ..config import get_settings
 from .market_data import MarketDataService
 from .ml.model_factory import MLModelFactory
-from ..database.database import get_db
-from ..core.dependencies import get_ml_model_factory, get_market_data_service
+
+if TYPE_CHECKING:
+    from .volatility import VolatilityService  # Import inside TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

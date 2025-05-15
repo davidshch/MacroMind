@@ -15,9 +15,17 @@ settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    logger.debug(f"Verifying password...")
+    try:
+        result = pwd_context.verify(plain_password, hashed_password)
+        logger.debug(f"Password verification result: {result}")  # Add logging
+        return result
+    except Exception as e:
+        logger.error(f"Error verifying password: {str(e)}")
+        return False
 
 def get_password_hash(password: str) -> str:
+    logger.debug("Hashing password...")  
     return pwd_context.hash(password)
 
 def create_access_token(data: dict) -> str:
@@ -60,3 +68,9 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Get the current active user. Currently just passes through get_current_user."""
+    return current_user

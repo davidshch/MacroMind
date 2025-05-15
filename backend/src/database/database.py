@@ -25,7 +25,22 @@ if not SQLALCHEMY_DATABASE_URL.startswith("postgresql+asyncpg://"):
         logger.info(f"Adjusted DATABASE_URL for asyncpg: {SQLALCHEMY_DATABASE_URL}")
 
 try:
-    engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=False)
+    engine = create_async_engine(
+        SQLALCHEMY_DATABASE_URL,
+        echo=False,
+        pool_size=5,  # Set a reasonable pool size for your load
+        max_overflow=10,  # Allow up to 10 connections more than pool_size
+        pool_timeout=30,  # Seconds to wait for a connection from pool
+        pool_recycle=1800,  # Recycle connections after 30 minutes
+        pool_pre_ping=True,  # Enable connection health checks
+        connect_args={
+            "command_timeout": 10,  # Timeout for operations in seconds
+            "server_settings": {
+                "statement_timeout": "10000",  # 10 seconds in milliseconds
+                "idle_in_transaction_session_timeout": "30000"  # 30 seconds in milliseconds
+            }
+        }
+    )
     AsyncSessionLocal = sessionmaker(
         bind=engine, 
         class_=AsyncSession, 
