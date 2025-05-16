@@ -12,8 +12,8 @@ import pandas as pd
 import numpy as np
 from fastapi import HTTPException, Depends
 
-from ..database.models import MarketSentiment, SentimentType, RawSentimentAnalysis
-from ..schemas.sentiment import SentimentCreate, VolatilityContext
+from ..database.models import MarketSentiment, SentimentType, RawSentimentAnalysis, AggregatedSentiment
+from ..schemas.sentiment import SentimentCreate, VolatilityContext, AggregatedSentimentResponse
 from ..schemas.volatility import VolatilityRegime
 from ..config import get_settings
 from .base_sentiment import BaseSentimentAnalyzer

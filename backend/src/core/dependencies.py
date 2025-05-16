@@ -11,6 +11,7 @@ from ..services.market_data import MarketDataService
 from .service_providers import get_market_data_service, get_ml_model_factory
 from ..services.volatility import VolatilityService
 from ..services.economic_calendar import EconomicCalendarService
+from ..services.sentiment_analysis import SentimentAnalysisService  # Import the missing service
 
 # --- ML Model Factory --- #
 _ml_model_factory_instance: Optional[MLModelFactory] = None

@@ -44,3 +44,6 @@ prophet~=1.1.6
 
 # Scheduling
 apscheduler~=3.11.0
+
+# Caching
+redis~=6.1.0
