@@ -15,9 +15,10 @@ settings = get_settings()
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-class VIPUpdateRequest(BaseModel):
-    email: EmailStr
-    is_vip: bool
+# Commenting out VIP-related admin logic for MVP submission
+# class VIPUpdateRequest(BaseModel):
+#     email: EmailStr
+#     is_vip: bool
 
 # Admin check based on email list in config
 ADMIN_EMAILS = settings.admin_emails if hasattr(settings, 'admin_emails') and settings.admin_emails else ["david@gmail.com"]
@@ -30,25 +31,25 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
         )
     return current_user
 
-@router.post("/users/vip", response_model=dict)
-async def update_vip_status(
-    request: VIPUpdateRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    """Update user's VIP status (admin only)."""
-    try:
-        user_service = UserService(db)
-        user = user_service.update_vip_status(request.email, request.is_vip)
-        return {
-            "message": "VIP status updated successfully",
-            "email": user.email,
-            "is_vip": user.is_vip
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.post("/users/vip", response_model=dict)
+# async def update_vip_status(
+#     request: VIPUpdateRequest,
+#     db: Session = Depends(get_db),
+#     admin: User = Depends(get_admin_user)
+# ):
+#     """Update user's VIP status (admin only)."""
+#     try:
+#         user_service = UserService(db)
+#         user = user_service.update_vip_status(request.email, request.is_vip)
+#         return {
+#             "message": "VIP status updated successfully",
+#             "email": user.email,
+#             "is_vip": user.is_vip
+#         }
+#     except ValueError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/train-volatility-model", response_model=TrainVolatilityModelResponse)
 async def train_volatility_model_endpoint(

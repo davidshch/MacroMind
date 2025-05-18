@@ -215,6 +215,7 @@ app.include_router(market_data.router, prefix="/api/market", tags=["Market Data"
 app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment Analysis"])
 app.include_router(volatility.router, prefix="/api/volatility", tags=["Volatility Analysis"])
 # app.include_router(sector_data.router, prefix="/api/sectors", tags=["Sector Data"])
+# Commenting out VIP-related router inclusion for MVP submission
 # app.include_router(vip.router, prefix="/api/v1/ai", tags=["AI (VIP)"])
 # app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 # app.include_router(alerts.router, prefix="/api/alerts", tags=["Alerts"])
