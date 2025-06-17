@@ -28,14 +28,13 @@ class UserService:
         )
         return result.scalar_one_or_none()
 
-    # Commenting out VIP-related logic in user service for MVP submission
-    # async def update_vip_status(self, email: str, is_vip: bool) -> User:
-    #     """Update user's VIP status."""
-    #     user = await self.get_user_by_email(email)
-    #     if not user:
-    #         raise ValueError(f"User with email {email} not found")
-    #     
-    #     user.is_vip = is_vip
-    #     await self.db.commit()
-    #     await self.db.refresh(user)
-    #     return user
+    async def update_vip_status(self, email: str, is_vip: bool) -> User:
+        """Update user's VIP status."""
+        user = await self.get_user_by_email(email)
+        if not user:
+            raise ValueError(f"User with email {email} not found")
+        
+        user.is_vip = is_vip
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
