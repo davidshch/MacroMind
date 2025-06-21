@@ -41,11 +41,11 @@ try:
             }
         }
     )
-    AsyncSessionLocal = sessionmaker(
-        bind=engine, 
-        class_=AsyncSession, 
-        expire_on_commit=False, 
-        autocommit=False, 
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    AsyncSessionLocal = async_sessionmaker(
+        bind=engine,
+        expire_on_commit=False,
         autoflush=False
     )
     logger.info("Async database engine and session maker initialized.")
