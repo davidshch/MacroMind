@@ -52,8 +52,11 @@ def do_run_migrations(connection):
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
+    section = config.get_section(config.config_ini_section)
+    if section is None:
+        raise RuntimeError("Could not load Alembic config section.")
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

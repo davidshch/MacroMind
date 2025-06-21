@@ -29,7 +29,7 @@ class MLModelFactory:
             return_all_scores=True
         )
         
-        self.prophet = Prophet(daily_seasonality=True)
+        self.prophet = Prophet(daily_seasonality="auto")
         
         self.volatility_model_path = model_path or DEFAULT_VOLATILITY_MODEL_PATH
         self.volatility_model = self._load_volatility_model(self.volatility_model_path)
@@ -51,10 +51,12 @@ class MLModelFactory:
 
         # Initialize LLM client
         settings = get_settings()
+        from pydantic import SecretStr
+
         self.llm = None
         if settings.openai_api_key:
             try:
-                self.llm = ChatOpenAI(openai_api_key=settings.openai_api_key, model_name="gpt-4-turbo") # Or "gpt-3.5-turbo"
+                self.llm = ChatOpenAI(api_key=SecretStr(settings.openai_api_key), model="gpt-4-turbo") # Or "gpt-3.5-turbo"
                 logger.info("ChatOpenAI LLM client initialized successfully.")
             except Exception as e:
                 logger.error(f"Failed to initialize ChatOpenAI LLM client: {e}")
@@ -114,16 +116,28 @@ class MLModelFactory:
         
         try:
             logger.info(f"Starting volatility model training with {len(features_df)} samples and features: {safe_feature_names}")
+            if self.volatility_model is None:
+                logger.warning("Volatility model is None before training. Re-initializing a new XGBRegressor.")
+                self.volatility_model = xgb.XGBRegressor(
+                    objective='reg:squarederror',
+                    n_estimators=100,
+                    learning_rate=0.05,
+                    max_depth=5,
+                    subsample=0.8,
+                    colsample_bytree=0.8,
+                    random_state=42
+                )
             self.volatility_model.fit(features_df, target_series)
             logger.info("Volatility model training completed.")
             
-            if hasattr(self.volatility_model, 'get_booster'):
+            if self.volatility_model is not None and hasattr(self.volatility_model, 'get_booster') and self.volatility_model.get_booster() is not None:
                 self.volatility_model.get_booster().feature_names = safe_feature_names
-            else:
-                self.volatility_model.feature_names_in_ = safe_feature_names
 
             path_to_save = save_path or self.volatility_model_path
-            self._save_volatility_model(self.volatility_model, path_to_save)
+            if self.volatility_model is not None:
+                self._save_volatility_model(self.volatility_model, path_to_save)
+            else:
+                logger.error("Attempted to save volatility model, but model is None.")
             return True
         except Exception as e:
             logger.exception(f"Error during volatility model training: {e}")
@@ -138,7 +152,10 @@ class MLModelFactory:
         """
         try:
             # FinBERT pipeline is initialized with return_all_scores=True
-            raw_results = self.sentiment_pipeline(text)
+            pipeline_result = self.sentiment_pipeline(text)
+            if pipeline_result is None or not isinstance(pipeline_result, (list, tuple)):
+                raise ValueError("Sentiment pipeline returned None or a non-iterable result.")
+            raw_results = list(pipeline_result)
             if not raw_results or not raw_results[0]: # Ensure results are not empty
                 raise ValueError("Sentiment pipeline returned empty or invalid results.")
 
@@ -231,8 +248,9 @@ class MLModelFactory:
         if not model_feature_names:
             logger.error("Could not retrieve feature names from the trained model.")
 
-        aligned_features_df = pd.DataFrame(columns=model_feature_names, index=features_df_safe_names.index)
-        for col in model_feature_names:
+        safe_model_feature_names = list(model_feature_names) if model_feature_names is not None else []
+        aligned_features_df = pd.DataFrame(columns=safe_model_feature_names, index=features_df_safe_names.index)
+        for col in safe_model_feature_names:
             if col in features_df_safe_names.columns:
                 aligned_features_df[col] = features_df_safe_names[col]
             else:
@@ -640,7 +658,7 @@ class MLModelFactory:
 
         try:
             # Use a fresh Prophet instance for this specific task
-            echo_prophet_model = Prophet(daily_seasonality=False, weekly_seasonality=False, yearly_seasonality=False)
+            echo_prophet_model = Prophet(daily_seasonality="auto", weekly_seasonality="auto", yearly_seasonality="auto")
             # Add custom seasonality if there's a theoretical basis, or keep it simple.
             # For event echoes, a simple trend fit might be best.
             echo_prophet_model.fit(prophet_df)
