@@ -20,6 +20,7 @@ DEFAULT_VOLATILITY_MODEL_PATH = os.path.join(TRAINED_MODELS_DIR, 'default_xgboos
 
 class MLModelFactory:
     """Factory for sentiment, volatility, and forecasting models."""
+    TRAINED_MODELS_DIR = os.path.join(os.path.dirname(__file__), 'trained_models')
     
     def __init__(self, model_path: Optional[str] = None):
         self.sentiment_pipeline = pipeline(

@@ -173,3 +173,19 @@ class RawSentimentAnalysis(Base):
     __table_args__ = (
         Index('idx_raw_sentiment_symbol_source_created', 'symbol', 'source', 'source_created_at'),
     )
+
+class AggregatedSentiment(Base):
+    """Aggregated sentiment data for a specific symbol and date."""
+    __tablename__ = "aggregated_sentiments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True)
+    date = Column(Date, index=True)
+    sentiment = Column(Enum(SentimentType))
+    score = Column(Float)
+    avg_daily_score = Column(Float, nullable=True)
+    moving_avg_7d = Column(Float, nullable=True)
+    news_score = Column(Float, nullable=True)
+    reddit_score = Column(Float, nullable=True)
+    benchmark = Column(String, nullable=True)
+    timestamp = Column(DateTime)

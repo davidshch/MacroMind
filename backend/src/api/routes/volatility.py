@@ -112,7 +112,7 @@ async def get_volatility_regime(
 ):
     """Get current volatility regime and market conditions for a symbol."""
     try:
-        result = await volatility_service.get_current_regime(symbol)
+        result = await volatility_service.calculate_and_predict_volatility(symbol)
         return {
             "symbol": symbol,
             "timestamp": datetime.now(),
