@@ -7,7 +7,7 @@ to generate comprehensive sentiment analysis for financial instruments.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date, datetime
 
@@ -22,20 +22,15 @@ from ...services.sentiment_analysis import SentimentAnalysisService
 from ...database.database import get_db
 from ...services.auth import get_current_active_user
 from ...database.models import User
-from ...services.ml.model_factory import MLModelFactory
+from ...core.dependencies import get_sentiment_service
 
-router = APIRouter(prefix="/api/sentiment", tags=["sentiment"])
-
-async def get_sentiment_service(db: Session = Depends(get_db), ml_factory: MLModelFactory = Depends(MLModelFactory)) -> SentimentAnalysisService:
-    """Dependency provider for SentimentAnalysisService."""
-    return SentimentAnalysisService(db=db, ml_model_factory=ml_factory)
+router = APIRouter(tags=["sentiment"])
 
 @router.get("/{symbol}", response_model=AggregatedSentimentResponse)
 async def get_aggregated_sentiment_endpoint(
     symbol: str,
     target_date: Optional[date] = Query(None, description="Target date (YYYY-MM-DD). Defaults to today."),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
-    current_user: User = Depends(get_current_active_user)
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service)
 ):
     """Get aggregated market sentiment for a symbol on a specific date."""
     if target_date is None:
@@ -54,7 +49,6 @@ async def get_aggregated_sentiment_endpoint(
 @router.post("/analyze-text", response_model=TextAnalysisResponse)
 async def analyze_text_endpoint(
     request: TextAnalysisRequest,
-    current_user: User = Depends(get_current_active_user),
     sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service)
 ):
     """Analyze sentiment of a provided text snippet using the base analyzer."""
@@ -76,8 +70,7 @@ async def get_sentiment_insights_endpoint(
     symbol: str,
     lookback_days: int = Query(7, ge=1, le=30, description="Number of past days of sentiment data to analyze."),
     num_themes: int = Query(3, ge=1, le=5, description="Number of key themes to extract."),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
-    current_user: User = Depends(get_current_active_user)
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service)
 ):
     """Get AI-distilled sentiment insights (key themes and summary) for a symbol."""
     try:
@@ -110,8 +103,7 @@ async def get_sentiment_spikes(
     symbol: str,
     lookback_days: int = Query(90, ge=30, le=365, description="Historical window for spike detection."),
     min_data_points: int = Query(30, ge=10, description="Minimum data points required."),
-    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
-    current_user: User = Depends(get_current_active_user)
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service)
 ):
     """Detect unusual spikes or drops in sentiment for a symbol."""
     try:

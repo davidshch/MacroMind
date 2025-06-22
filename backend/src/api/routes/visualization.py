@@ -1,61 +1,50 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Dict, Any
-from ...services.historical_data import HistoricalDataService
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...services.visualization import VisualizationService
 from ...services.auth import get_current_user
 from ...database.models import User
-from datetime import datetime
+from ...database.database import get_db
+from ...services.market_data import MarketDataService
+from ...core.dependencies import get_market_data_service
 
-router = APIRouter(prefix="/api/visualization", tags=["visualization"])
+router = APIRouter(tags=["visualization"])
 
-@router.get("/historical-prices/{symbol}")
+# Dependency provider for VisualizationService
+def get_visualization_service(
+    db: AsyncSession = Depends(get_db),
+    market_data_service: MarketDataService = Depends(get_market_data_service)
+) -> VisualizationService:
+    return VisualizationService(db, market_data_service)
+
+@router.get("/historical-prices/{symbol}", response_model=List[Dict[str, Any]])
 async def get_historical_prices(
     symbol: str,
-    interval: str = Query(default="daily"),
-    days: int = Query(default=30),
-    current_user: User = Depends(get_current_user)
-) -> List[Dict[str, Any]]:
+    days: int = Query(default=90, ge=7, le=365),
+    service: VisualizationService = Depends(get_visualization_service)
+):
     """Get historical price data for charting."""
     try:
-        service = HistoricalDataService()
-        data = await service.get_historical_prices(symbol, interval)
-        return data[-days:]  # Return only requested number of days
+        data = await service.get_historical_prices(symbol, days)
+        return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/sentiment-history/{symbol}")
+@router.get("/sentiment-history/{symbol}", response_model=List[Dict[str, Any]])
 async def get_sentiment_history(
     symbol: str,
-    days: int = Query(default=30),
-    current_user: User = Depends(get_current_user)
-) -> List[Dict[str, Any]]:
-    """Get historical sentiment data."""
+    days: int = Query(default=90, ge=7, le=365),
+    service: VisualizationService = Depends(get_visualization_service)
+):
+    """Get historical sentiment data for charting."""
     try:
-        service = HistoricalDataService()
         return await service.get_sentiment_history(symbol, days)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/volatility-history/{symbol}")
-async def get_volatility_history(
-    symbol: str,
-    days: int = Query(default=30),
-    current_user: User = Depends(get_current_user)
-) -> List[Dict[str, Any]]:
-    """Get historical volatility data."""
-    try:
-        service = HistoricalDataService()
-        return await service.get_volatility_history(symbol, days)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/market-analysis/{symbol}")
-async def get_market_analysis(
-    symbol: str,
-    current_user: User = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """Get comprehensive market analysis."""
-    try:
-        service = HistoricalDataService()
-        return await service.get_market_analysis(symbol)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Removing the other non-functional endpoints for now to keep it clean.
+# @router.get("/volatility-history/{symbol}")
+# ...
+# @router.get("/market-analysis/{symbol}")
+# ...

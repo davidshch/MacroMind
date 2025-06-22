@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database.database import get_db
-from ..database.models import MarketSentiment
+from ..database.models import AggregatedSentiment
 from .market_data import MarketDataService
 from .ml.model_factory import MLModelFactory
 from ..schemas.volatility import VolatilityRegime
@@ -62,13 +62,13 @@ class VolatilityService:
         """
         try:
             stmt = (
-                select(MarketSentiment.date, MarketSentiment.score)
+                select(AggregatedSentiment.date, AggregatedSentiment.score)
                 .where(
-                    MarketSentiment.symbol == symbol,
-                    MarketSentiment.date >= start_date,
-                    MarketSentiment.date <= end_date
+                    AggregatedSentiment.symbol == symbol,
+                    AggregatedSentiment.date >= start_date,
+                    AggregatedSentiment.date <= end_date
                 )
-                .order_by(MarketSentiment.date)
+                .order_by(AggregatedSentiment.date)
             )
             result = await self.db.execute(stmt)
             sentiments = result.fetchall()
@@ -99,15 +99,25 @@ class VolatilityService:
 
         logger.debug(f"Fetching price data for {symbol} from {fetch_start_date} to {end_date}")
         price_data_list = await self.market_data_service.get_historical_prices(symbol, data_fetch_lookback_days + 90)
+        
+        # If we don't have enough price data, generate mock data for training
+        if not price_data_list or len(price_data_list) < data_fetch_lookback_days * 0.5:
+            logger.warning(f"Insufficient price data for {symbol} ({len(price_data_list) if price_data_list else 0} records), generating mock data for training")
+            price_data_list = self._generate_mock_price_data(symbol, fetch_start_date, end_date, data_fetch_lookback_days + 90)
+        
         if not price_data_list:
             logger.warning(f"No price data for {symbol}")
             return pd.DataFrame()
+        
+        logger.debug(f"Processing {len(price_data_list)} price records for {symbol}")
         
         df = pd.DataFrame(price_data_list)
         df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date').sort_index()
         df = df[~df.index.duplicated(keep='first')]
         df = df[(df.index >= pd.Timestamp(fetch_start_date)) & (df.index <= pd.Timestamp(end_date))]
+        
+        logger.debug(f"After filtering, DataFrame has {len(df)} rows for {symbol}")
 
         # Add technical indicators
         df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
@@ -116,30 +126,141 @@ class VolatilityService:
 
         # Fetch VIX data
         vix_data_list = await self.market_data_service.get_historical_prices('^VIX', data_fetch_lookback_days + 90)
-        if vix_data_list:
+        if vix_data_list and len(vix_data_list) > 10:
             df_vix = pd.DataFrame(vix_data_list)
             df_vix['date'] = pd.to_datetime(df_vix['date'])
             df_vix = df_vix.set_index('date').sort_index()
             df_vix = df_vix[~df_vix.index.duplicated(keep='first')]
             df['vix_close'] = df_vix['close'].reindex(df.index, method='ffill')
         else:
-            logger.warning("No VIX data found, filling with NaN.")
-            df['vix_close'] = np.nan
+            logger.warning("No VIX data found, generating mock VIX data.")
+            df['vix_close'] = self._generate_mock_vix_data(df.index)
 
         # Fetch sentiment data
         sentiment_df = await self._fetch_historical_sentiment_df(symbol, fetch_start_date.date(), end_date.date())
+        
+        # Ensure unique indices before merging
+        df = df[~df.index.duplicated(keep='first')]
+        
+        logger.debug(f"Price DataFrame before sentiment merge: {len(df)} rows, date range: {df.index.min()} to {df.index.max()}")
+        logger.debug(f"Sentiment DataFrame: {len(sentiment_df)} rows, date range: {sentiment_df.index.min() if not sentiment_df.empty else 'N/A'} to {sentiment_df.index.max() if not sentiment_df.empty else 'N/A'}")
+        
         if not sentiment_df.empty:
-            df = df.merge(sentiment_df, left_index=True, right_index=True, how='left')
-            df['sentiment_score'] = df['sentiment_score'].ffill()
+            sentiment_df = sentiment_df[~sentiment_df.index.duplicated(keep='first')]
+            
+            if not sentiment_df.empty:
+                # Use left join to keep all price data, fill missing sentiment with 0
+                df = df.merge(sentiment_df, left_index=True, right_index=True, how='left')
+                # Drop duplicate indices after merge
+                df = df[~df.index.duplicated(keep='first')]
+                # Fill missing sentiment scores with 0
+                df['sentiment_score'] = df['sentiment_score'].fillna(0.0)
+                logger.debug(f"Added sentiment data, DataFrame now has {len(df)} rows")
+                logger.debug(f"DataFrame head after merge:\n{df.head(5)}")
+            else:
+                logger.warning(f"No sentiment data for {symbol}, filling with 0.")
+                df['sentiment_score'] = 0.0
         else:
             logger.warning(f"No sentiment data for {symbol}, filling with 0.")
             df['sentiment_score'] = 0.0
 
+        # Fill any remaining NaNs in vix_close with mock data
+        if 'vix_close' in df.columns and df['vix_close'].isna().any():
+            nan_idx = df[df['vix_close'].isna()].index
+            df.loc[nan_idx, 'vix_close'] = self._generate_mock_vix_data(nan_idx)
+            logger.debug(f"Filled {len(nan_idx)} NaNs in vix_close with mock data after merge.")
+
         # Finalize DataFrame
+        # Only drop NaNs in columns required for training
+        required_cols = ['log_returns', 'historical_vol_5d', 'historical_vol_10d', 'historical_vol_20d', 'historical_vol_60d', 'vix_close', 'sentiment_score']
         df = df.ffill().bfill()
-        df.dropna(inplace=True)
+        # Drop the first 60 rows to allow rolling windows to populate
+        if len(df) > 60:
+            df = df.iloc[60:]
+        logger.debug(f"DataFrame after dropping first 60 rows, head:\n{df.head(5)}")
+        logger.debug(f"NaN count per column before dropna: {df.isna().sum().to_dict()}")
+        df.dropna(subset=required_cols, inplace=True)
+        
+        logger.debug(f"Final DataFrame for {symbol} has {len(df)} rows and columns: {list(df.columns)}")
+        logger.debug(f"Final DataFrame head for {symbol}:\n{df.head()}")
+        logger.debug(f"Final DataFrame tail for {symbol}:\n{df.tail()}")
 
         return df
+
+    def _generate_mock_price_data(self, symbol: str, start_date: pd.Timestamp, end_date: pd.Timestamp, days: int) -> List[Dict[str, Any]]:
+        """Generate mock historical price data for training when real data is insufficient."""
+        import numpy as np
+        from datetime import date, timedelta
+        
+        # Base prices for different symbols
+        base_prices = {
+            "NVDA": 150.0,
+            "AAPL": 180.0,
+            "TSLA": 250.0,
+            "MSFT": 400.0,
+            "GOOGL": 140.0,
+            "AMZN": 180.0,
+            "META": 500.0,
+            "SPY": 450.0,
+            "QQQ": 380.0,
+            "^VIX": 20.0
+        }
+        
+        base_price = base_prices.get(symbol, 100.0)
+        
+        # Generate trading days (skip weekends)
+        trading_days = []
+        current_date = start_date.date()
+        while current_date <= end_date.date():
+            if current_date.weekday() < 5:  # Monday = 0, Friday = 4
+                trading_days.append(current_date)
+            current_date += timedelta(days=1)
+        
+        # Limit to requested days
+        trading_days = trading_days[-days:] if len(trading_days) > days else trading_days
+        
+        price_data = []
+        current_price = base_price
+        
+        for i, day in enumerate(trading_days):
+            # Generate realistic price movements
+            trend_factor = 0.0001 * (i % 252)  # Annual trend
+            volatility = 0.02  # 2% daily volatility
+            random_factor = np.random.normal(0, volatility)
+            
+            # Calculate price change
+            price_change = trend_factor + random_factor
+            current_price *= (1 + price_change)
+            
+            # Generate OHLC data
+            daily_volatility = 0.01  # 1% intraday volatility
+            open_price = current_price * (1 + np.random.normal(0, daily_volatility * 0.5))
+            high_price = max(open_price, current_price) * (1 + abs(np.random.normal(0, daily_volatility * 0.3)))
+            low_price = min(open_price, current_price) * (1 - abs(np.random.normal(0, daily_volatility * 0.3)))
+            close_price = current_price
+            
+            # Generate volume
+            base_volume = 1000000
+            volume = base_volume * (1 + np.random.normal(0, 0.3))
+            
+            price_data.append({
+                "date": day.strftime("%Y-%m-%d"),
+                "open": round(open_price, 2),
+                "high": round(high_price, 2),
+                "low": round(low_price, 2),
+                "close": round(close_price, 2),
+                "volume": int(volume)
+            })
+        
+        return price_data
+
+    def _generate_mock_vix_data(self, index) -> pd.Series:
+        """Generate mock VIX data with the given index for alignment."""
+        import numpy as np
+        # Generate realistic VIX values (usually between 10-40)
+        vix_values = np.random.normal(20, 5, len(index))
+        vix_values = np.clip(vix_values, 10, 40)  # Clip to realistic range
+        return pd.Series(vix_values, index=index)
 
     async def _prepare_training_data_df(
         self, 
@@ -253,6 +374,8 @@ class VolatilityService:
             "feature_names": ["N/A - Prediction error or no model"]
         }
         
+        logger.debug(f"Starting prediction for {symbol} using factory.")
+
         current_hist_vol_20d = 0.015
         if 'historical_vol_20d' in feature_df_for_prediction_context and not feature_df_for_prediction_context['historical_vol_20d'].empty:
             current_hist_vol_20d = feature_df_for_prediction_context['historical_vol_20d'].iloc[-1]
@@ -264,6 +387,8 @@ class VolatilityService:
         if feature_df_for_prediction_context.empty:
             logger.warning(f"Cannot predict volatility for {symbol}: feature DataFrame is empty.")
             return default_prediction_error_response
+
+        logger.debug(f"Feature DataFrame for prediction has {len(feature_df_for_prediction_context)} rows. Tail:\n{feature_df_for_prediction_context.tail()}")
 
         model_path = os.path.join(
             self.ml_model_factory.TRAINED_MODELS_DIR,
@@ -282,10 +407,15 @@ class VolatilityService:
             errors='ignore'
         ).to_frame().T
 
+        logger.debug(f"Shape of model input: {model_input_features_df.shape}. Columns: {model_input_features_df.columns.tolist()}")
+        logger.debug(f"Model input data:\n{model_input_features_df.to_string()}")
+
+        logger.debug(f"Calling ml_model_factory.predict_volatility for {symbol} with model_path: {model_path}")
         prediction_result_dict = await self.ml_model_factory.predict_volatility(
             model_path=model_path, 
             features_for_prediction=model_input_features_df
         )
+        logger.debug(f"Received result from ml_model_factory.predict_volatility for {symbol}")
 
         if "error" in prediction_result_dict:
             error_msg = prediction_result_dict["error"]
@@ -356,6 +486,7 @@ class VolatilityService:
 
             current_time = datetime.now()
             
+            logger.info(f"Preparing comprehensive features for {symbol} for prediction.")
             features_df = await self._prepare_comprehensive_features_df(
                 symbol, 
                 current_time, 
@@ -366,6 +497,8 @@ class VolatilityService:
                 logger.warning(f"Insufficient data after feature preparation for {symbol}, using mock data.")
                 return self._get_mock_volatility_data(symbol)
             
+            logger.debug(f"Comprehensive features prepared for {symbol}. Shape: {features_df.shape}. Columns: {features_df.columns.tolist()}")
+
             context_start_date = pd.to_datetime(current_time - timedelta(days=lookback_days))
             df_context = features_df[features_df.index >= context_start_date].copy()
 

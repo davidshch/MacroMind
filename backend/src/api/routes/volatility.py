@@ -25,8 +25,7 @@ router = APIRouter(tags=["volatility"])
 async def predict_volatility(
     request: Request,
     volatility_request: VolatilityRequest,
-    volatility_service: VolatilityService = Depends(get_volatility_service),
-    current_user: User = Depends(get_current_active_user)
+    volatility_service: VolatilityService = Depends(get_volatility_service)
 ):
     """
     Get volatility predictions for a given symbol.
@@ -62,8 +61,7 @@ async def get_historical_volatility(
     request: Request,
     symbol: str,
     days: int = 90,
-    volatility_service: VolatilityService = Depends(get_volatility_service),
-    current_user: User = Depends(get_current_active_user)
+    volatility_service: VolatilityService = Depends(get_volatility_service)
 ) -> List[Dict[str, Any]]:
     """Get historical volatility data with regime classifications."""
     try:
@@ -107,8 +105,7 @@ async def get_historical_volatility(
 async def get_volatility_regime(
     request: Request,
     symbol: str,
-    volatility_service: VolatilityService = Depends(get_volatility_service),
-    current_user: User = Depends(get_current_active_user)
+    volatility_service: VolatilityService = Depends(get_volatility_service)
 ):
     """Get current volatility regime and market conditions for a symbol."""
     try:

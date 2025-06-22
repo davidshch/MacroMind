@@ -34,6 +34,7 @@ pandas~=2.2.0
 numpy~=1.26.0
 scipy~=1.15.0
 joblib~=1.4.0
+tf-keras~=2.19.0
 
 # AI/LLM
 transformers[torch]~=4.38.0 

@@ -9,6 +9,8 @@ import hashlib
 from newsapi import NewsApiClient
 from sqlalchemy.orm import Session
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ..config import get_settings
 from .base_sentiment import BaseSentimentAnalyzer
@@ -22,18 +24,19 @@ settings = get_settings()
 _news_cache = {}
 _news_cache_expiry_seconds = 3600 * 1  # Cache news for 1 hour
 
-class NewsSentimentService(BaseSentimentAnalyzer):
+class NewsSentimentService:
     """Fetches news articles, analyzes their sentiment, and stores raw analysis."""
 
-    def __init__(self, db: Session = Depends(get_db)):
-        super().__init__()  # Initializes the sentiment analyzer (FinBERT)
+    def __init__(self, db: AsyncSession = Depends(get_db)):
+        # Use composition instead of inheritance
+        self.sentiment_analyzer = BaseSentimentAnalyzer()
         self.db = db  # Store DB session
-        if not settings.news_api_key:
+        if not settings.api_key_news:
             logger.warning("NewsAPI key not configured. NewsSentimentService will return empty results.")
             self.newsapi = None
         else:
             try:
-                self.newsapi = NewsApiClient(api_key=settings.news_api_key)
+                self.newsapi = NewsApiClient(api_key=settings.api_key_news)
             except Exception as e:
                 logger.error(f"Failed to initialize NewsApiClient: {e}")
                 self.newsapi = None
@@ -54,15 +57,18 @@ class NewsSentimentService(BaseSentimentAnalyzer):
         content_hash = self._generate_content_hash(text_to_analyze)
 
         try:
-            loop = asyncio.get_event_loop()
-            existing_analysis = await loop.run_in_executor(None, 
-                lambda: self.db.query(RawSentimentAnalysis).filter_by(text_content_hash=content_hash).first()
-            )
+            # Use async query to check for existence
+            stmt = select(RawSentimentAnalysis).where(RawSentimentAnalysis.text_content_hash == content_hash)
+            result = await self.db.execute(stmt)
+            existing_analysis = result.scalar_one_or_none()
+
             if existing_analysis:
                 logger.debug(f"Raw analysis for content hash {content_hash} already exists. Skipping storage.")
                 return
         except Exception as e:
             logger.error(f"Error checking for existing raw analysis (hash: {content_hash}): {e}", exc_info=True)
+            # Do not proceed if check fails
+            return
 
         source_created_at_str = article_data.get('publishedAt')
         source_created_at_dt = None
@@ -77,19 +83,23 @@ class NewsSentimentService(BaseSentimentAnalyzer):
             text_content_hash=content_hash,
             text_content=text_to_analyze,
             source="NewsAPI_" + (article_data.get('source', {}).get('id') or article_data.get('source', {}).get('name', 'unknown')).replace(" ", "_"),
-            sentiment_label=sentiment_result["primary_sentiment"],
-            sentiment_score=sentiment_result["primary_confidence"],
-            all_scores=sentiment_result["all_scores"],
+            sentiment_label=sentiment_result.get("primary_sentiment", "neutral"),
+            sentiment_score=sentiment_result.get("primary_confidence", 0.0),
+            all_scores=sentiment_result.get("all_scores"),
             analyzed_at=datetime.utcnow(),
             source_created_at=source_created_at_dt
         )
         try:
             self.db.add(raw_analysis_entry)
-            await loop.run_in_executor(None, self.db.commit)
-            logger.debug(f"Stored raw news analysis for: {article_data.get('title')[:50]}...")
+            # The session will be committed by the calling service (SentimentAnalysisService)
+            # await self.db.commit()
+            logger.debug(f"Added raw news analysis to session for: {article_data.get('title', '')[:50]}...")
         except Exception as e:
-            logger.error(f"DB Error storing raw news analysis for '{article_data.get('title')[:50]}...': {e}", exc_info=True)
-            await loop.run_in_executor(None, self.db.rollback)
+            logger.error(f"DB Error adding raw news analysis to session for '{article_data.get('title', '')[:50]}...': {e}", exc_info=True)
+            # Rollback should also be handled by the top-level service.
+            # await self.db.rollback()
+            # Re-raise the exception so the caller knows the operation failed.
+            raise
 
     async def get_news_sentiment(self, symbol: str, company_name: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -134,7 +144,7 @@ class NewsSentimentService(BaseSentimentAnalyzer):
                     continue
                 text_to_analyze = f"{title}. {content_preview}"
                 
-                sentiment_result = await self.ml_model_factory.analyze_sentiment(text_to_analyze)
+                sentiment_result = await self.sentiment_analyzer.analyze_text(text_to_analyze)
                 
                 if "error" not in sentiment_result:
                     processed_sentiments_for_aggregation.append(sentiment_result)
@@ -143,7 +153,13 @@ class NewsSentimentService(BaseSentimentAnalyzer):
                     logger.warning(f"Sentiment analysis failed for article: {title}")
             
             if storage_tasks:
-                await asyncio.gather(*storage_tasks, return_exceptions=True)
+                storage_results = await asyncio.gather(*storage_tasks, return_exceptions=True)
+                for res in storage_results:
+                    if isinstance(res, Exception):
+                        logger.error(f"An error occurred during raw news analysis DB storage: {res}", exc_info=res)
+                        # We don't commit here, but we raise to signal a failure in the unit of work.
+                        # The top-level handler will perform a rollback.
+                        raise HTTPException(status_code=500, detail="Failed to store raw sentiment data.")
 
             aggregated_result = self._aggregate_news_sentiment(symbol, articles, processed_sentiments_for_aggregation)
             self._cache_news(cache_key, aggregated_result)

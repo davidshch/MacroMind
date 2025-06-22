@@ -3,7 +3,7 @@ Main entry point for MacroMind API.
 Handles market data streaming, sentiment analysis, and user authentication.
 """
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import logging.config
@@ -21,10 +21,12 @@ from .api.routes import (
     market_data,
     sentiment,
     volatility,
+    alerts,
+    admin,
+    visualization,
+    ai_analyst,
 #     vip,
 #     sector_data,
-#     admin,
-#     alerts,
 #     economic_calendar,
 #     opportunities
 )
@@ -214,13 +216,50 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(market_data.router, prefix="/api/market", tags=["Market Data"])
 app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment Analysis"])
 app.include_router(volatility.router, prefix="/api/volatility", tags=["Volatility Analysis"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["Alerts"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(visualization.router, prefix="/api/visualization", tags=["Visualization"])
+app.include_router(ai_analyst.router, prefix="/api", tags=["AI Analyst"])
 # app.include_router(sector_data.router, prefix="/api/sectors", tags=["Sector Data"])
 # app.include_router(vip.router, prefix="/api/v1/ai", tags=["AI (VIP)"])
-# app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
-# app.include_router(alerts.router, prefix="/api/alerts", tags=["Alerts"])
 # app.include_router(economic_calendar.router, prefix="/api/calendar", tags=["Economic Calendar"])
 # app.include_router(opportunities.router, prefix="/api/opportunities", tags=["Market Opportunities"])
 # logger.info("API routers included.")
+
+from .services.websocket import websocket_service_instance
+from .services.auth import get_current_user_from_token
+from .database.models import User
+
+@app.websocket("/ws")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Depends(get_current_user_from_token)
+):
+    """Main WebSocket endpoint for real-time communication."""
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    user: User = await get_current_user_from_token(token)
+    if not user:
+        await websocket.close(code=1008)
+        return
+
+    user_id = str(user.id)
+    await websocket_service_instance.connect(websocket, user_id)
+    try:
+        while True:
+            # You can receive messages from the client if needed
+            data = await websocket.receive_text()
+            logger.info(f"Received message from user {user_id}: {data}")
+            # Echo back the message for testing
+            await websocket_service_instance.send_personal_message(f"Echo: {data}", user_id)
+    except WebSocketDisconnect:
+        websocket_service_instance.disconnect(websocket, user_id)
+        logger.info(f"WebSocket disconnected for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error in WebSocket for user {user_id}: {e}", exc_info=True)
+        websocket_service_instance.disconnect(websocket, user_id)
 
 # --- Root Endpoint --- #
 @app.get("/")

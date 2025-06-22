@@ -1,0 +1,303 @@
+[
+  {
+    "endpoint": "/api/sentiment/AAPL",
+    "method": "GET",
+    "description": "Sentiment Analysis - Core MVP Endpoint",
+    "status_code": 200,
+    "success": true,
+    "response": {
+      "id": 1,
+      "symbol": "AAPL",
+      "date": "2025-06-21",
+      "overall_sentiment": "neutral",
+      "normalized_score": 0.053,
+      "avg_daily_score": 0.053,
+      "moving_avg_7d": 0.053,
+      "benchmark": "SPY",
+      "news_sentiment_details": {
+        "article_count": 20,
+        "sentiment_distribution": {
+          "bullish": 2,
+          "bearish": 2,
+          "neutral": 16
+        },
+        "top_articles": [
+          {
+            "title": "Best Music Stocks To Watch Now \u2013 June 12th",
+            "url": "https://www.etfdailynews.com/2025/06/14/best-music-stocks-to-watch-now-june-12th/",
+            "publishedAt": "2025-06-14T09:52:48Z",
+            "source": "ETF Daily News",
+            "sentiment": "neutral",
+            "confidence": 0.9523947238922119
+          },
+          {
+            "title": "Time to Think Different: Tim Cook\u2019s leadership has run its course at Apple",
+            "url": "https://macdailynews.com/2025/06/20/time-to-think-different-tim-cooks-leadership-has-run-its-course-at-apple/",
+            "publishedAt": "2025-06-20T18:06:01Z",
+            "source": "Macdailynews.com",
+            "sentiment": "bearish",
+            "confidence": 0.939967691898346
+          },
+          {
+            "title": "Apple Just Snatched Back the Top Spot in China Smartphone Sales. Should You Buy AAPL Stock Here?",
+            "url": "https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_539ef16f-e06b-4195-966a-46770452eee9",
+            "publishedAt": "2025-06-18T14:30:02Z",
+            "source": "Yahoo Entertainment",
+            "sentiment": "neutral",
+            "confidence": 0.9277167916297913
+          }
+        ],
+        "average_confidence": 0.788,
+        "last_updated": "2025-06-21T23:28:58.769472",
+        "source": "newsapi",
+        "status": "success"
+      },
+      "reddit_sentiment_details": {
+        "post_count": 2,
+        "total_engagement": 3250,
+        "sentiment_distribution": {
+          "bullish": 0,
+          "bearish": 1,
+          "neutral": 1
+        },
+        "confidence": 0.286,
+        "subreddit_breakdown": {
+          "stocks": {
+            "post_count": 1,
+            "total_engagement": 143,
+            "avg_confidence": 0.296
+          },
+          "wallstreetbets": {
+            "post_count": 1,
+            "total_engagement": 2817,
+            "avg_confidence": 0.276
+          }
+        },
+        "last_updated": "2025-06-21T23:29:02.085844",
+        "source": "reddit",
+        "status": "success"
+      },
+      "news_sentiment_score": 0.053,
+      "reddit_sentiment_score": -0.051,
+      "market_condition": "normal_mock",
+      "volatility_context": {
+        "level": 0.23804999999999998,
+        "is_high": false,
+        "trend": "stable"
+      },
+      "source_weights": {
+        "news_sentiment": 0.6,
+        "reddit_sentiment": 0.4
+      },
+      "timestamp": "2025-06-21T19:49:18.308679",
+      "data_quality_score": 1.0,
+      "sentiment_strength": 0.053,
+      "sentiment_confidence": 0.587,
+      "data_sources_available": {
+        "news": true,
+        "reddit": true
+      }
+    },
+    "timestamp": "2025-06-21T23:29:02.087715"
+  },
+  {
+    "endpoint": "/api/sentiment/TSLA",
+    "method": "GET",
+    "description": "Sentiment Analysis - Alternative Stock",
+    "status_code": 200,
+    "success": true,
+    "response": {
+      "id": 2,
+      "symbol": "TSLA",
+      "date": "2025-06-21",
+      "overall_sentiment": "bearish",
+      "normalized_score": -0.319,
+      "avg_daily_score": -0.319,
+      "moving_avg_7d": -0.319,
+      "benchmark": "SPY",
+      "news_sentiment_details": {
+        "article_count": 20,
+        "sentiment_distribution": {
+          "bullish": 3,
+          "bearish": 9,
+          "neutral": 8
+        },
+        "top_articles": [
+          {
+            "title": "Tesla (TSLA) to Halt Gigafactory Texas Output Again Amid Inventory Pressure",
+            "url": "https://finance.yahoo.com/news/tesla-tsla-halt-gigafactory-texas-120508210.html",
+            "publishedAt": "2025-06-18T12:05:08Z",
+            "source": "Yahoo Entertainment",
+            "sentiment": "bearish",
+            "confidence": 0.9659844636917114
+          },
+          {
+            "title": "Tesla (TSLA) Stock Rated Overweight as Robotaxi Launch Nears",
+            "url": "https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_9d5dab2e-b10f-437f-a6ff-3af89b875819",
+            "publishedAt": "2025-06-20T12:38:41Z",
+            "source": "Yahoo Entertainment",
+            "sentiment": "neutral",
+            "confidence": 0.9434000849723816
+          },
+          {
+            "title": "Stock market today: S&P 500, Nasdaq fall with focus on Trump Iran decision, Fed rate cuts, China chip tensions",
+            "url": "https://finance.yahoo.com/news/live/stock-market-today-sp-500-nasdaq-fall-with-focus-on-trump-iran-decision-fed-rate-cuts-china-chip-tensions-145802639.html",
+            "publishedAt": "2025-06-20T14:58:02Z",
+            "source": "Yahoo Entertainment",
+            "sentiment": "bearish",
+            "confidence": 0.9345567226409912
+          }
+        ],
+        "average_confidence": 0.781,
+        "last_updated": "2025-06-21T23:29:05.815714",
+        "source": "newsapi",
+        "status": "success"
+      },
+      "reddit_sentiment_details": {
+        "post_count": 5,
+        "total_engagement": 2412,
+        "sentiment_distribution": {
+          "bullish": 1,
+          "bearish": 2,
+          "neutral": 2
+        },
+        "confidence": 0.302,
+        "subreddit_breakdown": {
+          "stocks": {
+            "post_count": 3,
+            "total_engagement": 2257,
+            "avg_confidence": 0.431
+          },
+          "investing": {
+            "post_count": 1,
+            "total_engagement": 8,
+            "avg_confidence": 0.01
+          },
+          "stockmarket": {
+            "post_count": 1,
+            "total_engagement": 48,
+            "avg_confidence": 0.205
+          }
+        },
+        "last_updated": "2025-06-21T23:29:08.076675",
+        "source": "reddit",
+        "status": "success"
+      },
+      "news_sentiment_score": -0.319,
+      "reddit_sentiment_score": -0.023,
+      "market_condition": "normal_mock",
+      "volatility_context": {
+        "level": 0.23804999999999998,
+        "is_high": false,
+        "trend": "stable"
+      },
+      "source_weights": {
+        "news_sentiment": 0.6,
+        "reddit_sentiment": 0.4
+      },
+      "timestamp": "2025-06-21T20:43:45.058620",
+      "data_quality_score": 1.0,
+      "sentiment_strength": 0.319,
+      "sentiment_confidence": 0.589,
+      "data_sources_available": {
+        "news": true,
+        "reddit": true
+      }
+    },
+    "timestamp": "2025-06-21T23:29:08.077564"
+  },
+  {
+    "endpoint": "/api/sentiment/AAPL/insights",
+    "method": "GET",
+    "description": "LLM Insights - AI Explanation",
+    "status_code": 200,
+    "success": true,
+    "response": {
+      "themes": [],
+      "summary": "No recent sentiment data available to analyze.",
+      "asset_symbol": "AAPL",
+      "lookback_days": 7,
+      "timestamp": "2025-06-21T23:29:08.082183"
+    },
+    "timestamp": "2025-06-21T23:29:08.082557"
+  },
+  {
+    "endpoint": "/api/volatility/predict",
+    "method": "POST",
+    "description": "Volatility Prediction - Core ML Feature",
+    "status_code": 200,
+    "success": true,
+    "response": {
+      "symbol": "AAPL",
+      "timestamp": "2025-06-21T23:29:10.336730",
+      "current_volatility": 0.23804999999999998,
+      "historical_volatility_annualized": 0.24,
+      "volatility_10d_percentile": 65.0,
+      "predicted_volatility": 0.28565999999999997,
+      "prediction_range": {
+        "low": 0.19044,
+        "high": 0.38088
+      },
+      "market_conditions": "normal_mock",
+      "volatility_regime": "normal",
+      "is_high_volatility": false,
+      "trend": "stable",
+      "confidence_score": 0.75,
+      "metadata": {
+        "model_version": "mock_factory_0.1",
+        "features_used": [
+          "mock_vol_20d",
+          "mock_sentiment",
+          "mock_vix"
+        ],
+        "last_updated": "2025-06-21T23:29:10.336749"
+      }
+    },
+    "timestamp": "2025-06-21T23:29:10.338216"
+  },
+  {
+    "endpoint": "/api/volatility/predict",
+    "method": "POST",
+    "description": "Volatility Prediction - Alternative Stock",
+    "status_code": 200,
+    "success": true,
+    "response": {
+      "symbol": "TSLA",
+      "timestamp": "2025-06-21T23:29:11.063419",
+      "current_volatility": 0.23804999999999998,
+      "historical_volatility_annualized": 0.24,
+      "volatility_10d_percentile": 65.0,
+      "predicted_volatility": 0.28565999999999997,
+      "prediction_range": {
+        "low": 0.19044,
+        "high": 0.38088
+      },
+      "market_conditions": "normal_mock",
+      "volatility_regime": "normal",
+      "is_high_volatility": false,
+      "trend": "stable",
+      "confidence_score": 0.75,
+      "metadata": {
+        "model_version": "mock_factory_0.1",
+        "features_used": [
+          "mock_vol_20d",
+          "mock_sentiment",
+          "mock_vix"
+        ],
+        "last_updated": "2025-06-21T23:29:11.063425"
+      }
+    },
+    "timestamp": "2025-06-21T23:29:11.064181"
+  },
+  {
+    "endpoint": "/api/alerts/",
+    "method": "POST",
+    "description": "Alert Creation - Action System",
+    "status_code": 500,
+    "success": false,
+    "response": {
+      "detail": "Internal server error while creating alert."
+    },
+    "timestamp": "2025-06-21T23:29:11.075094"
+  }
+]

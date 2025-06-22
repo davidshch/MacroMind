@@ -21,6 +21,7 @@ class AlertConditions(BaseModel):
     description: Optional[str] = Field(None, description="User-friendly description of the alert conditions.")
 
 class AlertBase(BaseModel):
+    name: Optional[str] = Field(None, example="AAPL Volatility Spike", description="A user-defined name for the alert.")
     symbol: str = Field(..., example="AAPL", description="The financial symbol for the alert (e.g., AAPL, EURUSD).")
     conditions: AlertConditions = Field(..., description="Structured conditions for the alert to trigger.")
     notes: Optional[str] = Field(None, example="Watch for breakout", description="Optional user notes for the alert.")
@@ -30,6 +31,7 @@ class AlertCreate(AlertBase):
     pass
 
 class AlertUpdate(BaseModel):
+    name: Optional[str] = None
     symbol: Optional[str] = None
     conditions: Optional[AlertConditions] = None
     notes: Optional[str] = None

@@ -71,6 +71,12 @@ class AggregatedSentimentResponse(BaseModel):
     volatility_context: VolatilityContext = Field(..., description="Detailed volatility context")
     source_weights: Dict[str, float] = Field(..., description="Weights used for source aggregation")
     timestamp: datetime
+    
+    # Additional context fields
+    data_quality_score: Optional[float] = Field(None, description="Score indicating quality of available data (0-1)")
+    sentiment_strength: Optional[float] = Field(None, description="Absolute strength of sentiment regardless of direction (0-1)")
+    sentiment_confidence: Optional[float] = Field(None, description="Overall confidence in the sentiment analysis (0-1)")
+    data_sources_available: Optional[Dict[str, bool]] = Field(None, description="Which data sources contributed to the analysis")
 
     class Config:
         from_attributes = True # Allows Pydantic to map ORM model fields

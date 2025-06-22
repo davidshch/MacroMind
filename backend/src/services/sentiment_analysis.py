@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-class SentimentAnalysisService(BaseSentimentAnalyzer):
+class SentimentAnalysisService:
     """Aggregates sentiment from news, social media, and potentially other sources."""
 
     def __init__(self, 
@@ -37,13 +37,13 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
                  ml_model_factory: MLModelFactory,
                  volatility_service: VolatilityService):
         """Initialize with DB session and sub-services."""
-        super().__init__()
         self.db = db
         self.social_service = SocialSentimentService(db=db)
         self.news_service = NewsSentimentService(db=db)
         self.volatility_service = volatility_service
         self.market_data_service = market_data_service
         self.ml_model_factory = ml_model_factory
+        self.base_analyzer = BaseSentimentAnalyzer()  # Use composition instead of inheritance
         self.source_weights = {
             "news_sentiment": 0.6,
             "reddit_sentiment": 0.4
@@ -108,12 +108,7 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
         db_sentiment_record = await self._get_sentiment_from_db(symbol, target_date)
         volatility_data = await self.volatility_service.calculate_and_predict_volatility(symbol)
 
-        if db_sentiment_record and db_sentiment_record.moving_avg_7d is not None:
-            logger.info(f"Returning existing aggregated sentiment for {symbol} on {target_date} from DB.")
-            return self._create_response_with_context(db_sentiment_record, volatility_data)
-
-        logger.info(f"No complete sentiment data in DB for {symbol} on {target_date}. Fetching and processing.")
-
+        # Always fetch fresh sentiment details for the response, even if we have cached data
         news_task = self.news_service.get_news_sentiment(symbol)
         social_task = self.social_service.get_reddit_sentiment(symbol)
 
@@ -127,6 +122,35 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
         if isinstance(social_result, Exception):
             logger.error(f"Failed to fetch social sentiment for {symbol}: {social_result}")
             social_result = None
+
+        if db_sentiment_record and db_sentiment_record.moving_avg_7d is not None:
+            # Check if we have valid Reddit sentiment data
+            has_valid_reddit_data = (
+                social_result and 
+                social_result.get('post_count', 0) > 0
+            )
+            
+            # If we don't have valid Reddit data, force a fresh fetch
+            if not has_valid_reddit_data:
+                logger.info(f"No valid Reddit data found for {symbol}, forcing fresh fetch")
+                try:
+                    # Clear the Reddit cache for this symbol
+                    self.social_service.clear_cache_for_symbol(symbol)
+                    
+                    # Try to get fresh Reddit data
+                    fresh_social_result = await self.social_service.get_reddit_sentiment(symbol)
+                    if fresh_social_result and fresh_social_result.get('post_count', 0) > 0:
+                        logger.info(f"Successfully fetched fresh Reddit data for {symbol}")
+                        social_result = fresh_social_result
+                    else:
+                        logger.warning(f"Fresh Reddit fetch still returned no data for {symbol}")
+                except Exception as e:
+                    logger.error(f"Error during fresh Reddit fetch for {symbol}: {e}")
+            
+            logger.info(f"Returning existing aggregated sentiment for {symbol} on {target_date} from DB with fresh details.")
+            return self._create_response_with_context(db_sentiment_record, volatility_data, news_result, social_result)
+
+        logger.info(f"No complete sentiment data in DB for {symbol} on {target_date}. Fetching and processing.")
 
         selected_benchmark: str
         if volatility_data is None or isinstance(volatility_data, Exception):
@@ -146,14 +170,20 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
         try:
             stored_sentiment = await self._store_sentiment_in_db(aggregated_data_create_schema, symbol, target_date)
             logger.info(f"Stored/Updated aggregated sentiment for {symbol} on {target_date} in DB.")
-            return self._create_response_with_context(stored_sentiment, volatility_data)
+            return self._create_response_with_context(stored_sentiment, volatility_data, news_result, social_result)
         except SQLAlchemyError as e:
             logger.error(f"Failed to store aggregated sentiment for {symbol}: {e}")
-            await self.db.rollback()
+            try:
+                await self.db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error during rollback: {rollback_error}")
             raise HTTPException(status_code=500, detail="Database error storing sentiment.")
         except Exception as e:
             logger.error(f"Unexpected error after aggregation for {symbol}: {e}")
-            await self.db.rollback()
+            try:
+                await self.db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error during rollback: {rollback_error}")
             raise HTTPException(status_code=500, detail="Server error processing sentiment.")
 
     def _select_benchmark(self, symbol: str, volatility_data: Optional[Dict]) -> str:
@@ -198,23 +228,15 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
                 logger.warning(f"News score for {symbol} is not a valid number: {raw_news_score}")
 
         reddit_score_normalized: Optional[float] = None
-        reddit_data_to_use = None
-        if social_result and social_result.get('timeframes'):
-            reddit_data_to_use = social_result['timeframes'].get('24h')
-        
-        if reddit_data_to_use and reddit_data_to_use.get('post_count', 0) > 0:
-            confidence = reddit_data_to_use.get('confidence', 0.0)
-            sentiment_label = reddit_data_to_use.get('sentiment', 'neutral').lower()
-            
-            temp_reddit_score = 0.0
-            if sentiment_label == 'bullish':
-                temp_reddit_score = confidence
-            elif sentiment_label == 'bearish':
-                temp_reddit_score = -confidence
-            
-            reddit_score_normalized = max(-1.0, min(1.0, temp_reddit_score))
-            weighted_score_sum += reddit_score_normalized * self.source_weights['reddit_sentiment']
-            total_weight += self.source_weights['reddit_sentiment']
+        if social_result and social_result.get('post_count', 0) > 0:
+            # Use the normalized_score directly from Reddit service
+            raw_reddit_score = social_result.get('normalized_score')
+            if isinstance(raw_reddit_score, (int, float)):
+                reddit_score_normalized = max(-1.0, min(1.0, raw_reddit_score))
+                weighted_score_sum += reddit_score_normalized * self.source_weights['reddit_sentiment']
+                total_weight += self.source_weights['reddit_sentiment']
+            else:
+                logger.warning(f"Reddit score for {symbol} is not a valid number: {raw_reddit_score}")
 
         if total_weight == 0:
             final_score = 0.0
@@ -260,33 +282,75 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
     async def _store_sentiment_in_db(self, sentiment_data: SentimentCreate, symbol: str, target_date: date) -> AggregatedSentiment:
         """Store or update aggregated sentiment in the database and then update its MVA."""
         
-        db_sentiment_record = await self._get_sentiment_from_db(symbol, target_date)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Check if we need to rollback any pending transaction
+                if self.db.is_active:
+                    try:
+                        await self.db.rollback()
+                    except Exception as rollback_error:
+                        logger.warning(f"Error during rollback attempt {attempt + 1}: {rollback_error}")
+                
+                db_sentiment_record = await self._get_sentiment_from_db(symbol, target_date)
 
-        if db_sentiment_record:
-            logger.debug(f"Updating existing sentiment record for {symbol} on {target_date}")
-            db_sentiment_record.sentiment = sentiment_data.sentiment
-            db_sentiment_record.score = sentiment_data.score
-            db_sentiment_record.news_score = sentiment_data.news_score
-            db_sentiment_record.reddit_score = sentiment_data.reddit_score
-            db_sentiment_record.benchmark = sentiment_data.benchmark
-            db_sentiment_record.avg_daily_score = sentiment_data.avg_daily_score
-            db_sentiment_record.timestamp = datetime.now()
-        else:
-            logger.debug(f"Creating new sentiment record for {symbol} on {target_date}")
-            db_sentiment_record = AggregatedSentiment(**sentiment_data.model_dump())
-            self.db.add(db_sentiment_record)
-        
-        try:
-            await self.db.commit()
-            await self.db.refresh(db_sentiment_record)
-        except SQLAlchemyError as e:
-            logger.error(f"SQLAlchemyError during commit for daily sentiment {symbol} on {target_date}: {e}")
-            await self.db.rollback()
-            raise
+                if db_sentiment_record:
+                    logger.debug(f"Updating existing sentiment record for {symbol} on {target_date}")
+                    db_sentiment_record.sentiment = sentiment_data.sentiment
+                    db_sentiment_record.score = sentiment_data.score
+                    db_sentiment_record.news_score = sentiment_data.news_score
+                    db_sentiment_record.reddit_score = sentiment_data.reddit_score
+                    db_sentiment_record.benchmark = sentiment_data.benchmark
+                    db_sentiment_record.timestamp = datetime.now()
+                else:
+                    logger.debug(f"Creating new sentiment record for {symbol} on {target_date}")
+                    db_sentiment_record = AggregatedSentiment(
+                        symbol=symbol,
+                        date=target_date,
+                        sentiment=sentiment_data.sentiment,
+                        score=sentiment_data.score,
+                        avg_daily_score=sentiment_data.avg_daily_score,
+                        moving_avg_7d=sentiment_data.moving_avg_7d,
+                        news_score=sentiment_data.news_score,
+                        reddit_score=sentiment_data.reddit_score,
+                        benchmark=sentiment_data.benchmark,
+                        timestamp=datetime.now()
+                    )
+                    self.db.add(db_sentiment_record)
 
-        await self._update_moving_average_for_record(db_sentiment_record)
-        
-        return db_sentiment_record
+                await self.db.commit()
+                await self.db.refresh(db_sentiment_record)
+                
+                # Update moving average after successful commit
+                await self._update_moving_average_for_record(db_sentiment_record)
+                
+                return db_sentiment_record
+                
+            except SQLAlchemyError as e:
+                logger.error(f"SQLAlchemyError during commit for daily sentiment {symbol} on {target_date} (attempt {attempt + 1}): {e}")
+                try:
+                    await self.db.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Error during rollback: {rollback_error}")
+                
+                if attempt == max_retries - 1:
+                    raise
+                else:
+                    # Wait before retrying
+                    await asyncio.sleep(1)
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error storing sentiment for {symbol} on {target_date} (attempt {attempt + 1}): {e}")
+                try:
+                    await self.db.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Error during rollback: {rollback_error}")
+                
+                if attempt == max_retries - 1:
+                    raise
+                else:
+                    # Wait before retrying
+                    await asyncio.sleep(1)
 
     async def _update_moving_average_for_record(self, current_sentiment_record: AggregatedSentiment, mva_window_days: int = 7):
         """
@@ -323,20 +387,19 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
                 mva = df['avg_daily_score'].rolling(window=mva_window_days, min_periods=1).mean().iloc[-1]
                 current_sentiment_record.moving_avg_7d = round(mva, 4)
 
-            await self.db.commit()
-            logger.info(f"Successfully updated {mva_window_days}-day MVA for {symbol} on {current_date} to {current_sentiment_record.moving_avg_7d}")
-
         except SQLAlchemyError as e:
             logger.error(f"SQLAlchemyError updating MVA for {symbol} on {current_date}: {e}")
-            await self.db.rollback()
+            # Do not rollback here, let the calling function handle it.
         except Exception as e:
             logger.error(f"Unexpected error updating MVA for {symbol} on {current_date}: {e}")
-            await self.db.rollback()
+            # Do not rollback here, let the calling function handle it.
 
     def _create_response_with_context(
         self, 
         db_sentiment: AggregatedSentiment, 
-        volatility_data: Optional[Dict]
+        volatility_data: Optional[Dict],
+        news_result: Optional[Dict] = None,
+        social_result: Optional[Dict] = None
     ) -> AggregatedSentimentResponse:
         """Combines DB sentiment data with volatility context into the response schema."""
         
@@ -350,6 +413,43 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
             )
             market_condition_from_vol = volatility_data.get('market_conditions', 'unknown')
 
+        # Prepare news sentiment details
+        news_sentiment_details = None
+        if news_result and news_result.get('article_count', 0) > 0:
+            news_sentiment_details = {
+                "article_count": news_result.get('article_count', 0),
+                "sentiment_distribution": news_result.get('sentiment_distribution', {}),
+                "top_articles": news_result.get('top_articles', [])[:3],  # Top 3 articles
+                "average_confidence": news_result.get('confidence', 0.0),
+                "last_updated": news_result.get('last_updated', datetime.now().isoformat()),
+                "source": "newsapi",
+                "status": "success"
+            }
+
+        # Prepare Reddit sentiment details
+        reddit_sentiment_details = None
+        computed_reddit_score = None
+        subreddit_breakdown = {}
+        if social_result:
+            subreddit_breakdown = social_result.get('subreddit_breakdown', {})
+            computed_reddit_score = social_result.get('normalized_score')
+            # Always include Reddit sentiment details, even if no posts
+            reddit_sentiment_details = {
+                "post_count": social_result.get('post_count', 0),
+                "total_engagement": social_result.get('total_engagement', 0),
+                "sentiment_distribution": social_result.get('sentiment_distribution', {}),
+                "confidence": social_result.get('confidence', 0.0),
+                "subreddit_breakdown": subreddit_breakdown,
+                "last_updated": social_result.get('last_updated', datetime.now().isoformat()),
+                "source": "reddit",
+                "status": "success" if social_result.get('post_count', 0) > 0 else "no_data"
+            }
+
+        # Fallback for reddit_sentiment_score if DB value is None
+        reddit_sentiment_score = db_sentiment.reddit_score
+        if reddit_sentiment_score is None and computed_reddit_score is not None:
+            reddit_sentiment_score = computed_reddit_score
+
         response = AggregatedSentimentResponse(
             id=db_sentiment.id,
             symbol=db_sentiment.symbol,
@@ -359,20 +459,50 @@ class SentimentAnalysisService(BaseSentimentAnalyzer):
             avg_daily_score=db_sentiment.avg_daily_score,
             moving_avg_7d=db_sentiment.moving_avg_7d,
             benchmark=db_sentiment.benchmark,
+            news_sentiment_details=news_sentiment_details,
+            reddit_sentiment_details=reddit_sentiment_details,
             news_sentiment_score=db_sentiment.news_score,
-            reddit_sentiment_score=db_sentiment.reddit_score,
+            reddit_sentiment_score=reddit_sentiment_score,
             market_condition=market_condition_from_vol, 
             volatility_context=vol_context,
             source_weights=self.source_weights,
             timestamp=db_sentiment.timestamp
         )
-        return response
+        
+        # Add additional context to the response
+        response_dict = response.model_dump()
+        
+        # Calculate data quality score
+        data_quality_score = 0.0
+        if news_sentiment_details and news_sentiment_details.get('article_count', 0) > 0:
+            data_quality_score += 0.5
+        if reddit_sentiment_details and reddit_sentiment_details.get('post_count', 0) > 0:
+            data_quality_score += 0.5
+        
+        # Calculate sentiment strength (how strong the sentiment is, regardless of direction)
+        sentiment_strength = abs(db_sentiment.score)
+        
+        # Add summary statistics
+        response_dict.update({
+            "data_quality_score": round(data_quality_score, 2),
+            "sentiment_strength": round(sentiment_strength, 3),
+            "sentiment_confidence": round(
+                (news_sentiment_details.get('average_confidence', 0.0) if news_sentiment_details else 0.0) * 0.6 +
+                (reddit_sentiment_details.get('confidence', 0.0) if reddit_sentiment_details else 0.0) * 0.4, 3
+            ),
+            "data_sources_available": {
+                "news": news_sentiment_details is not None and news_sentiment_details.get('article_count', 0) > 0,
+                "reddit": reddit_sentiment_details is not None and reddit_sentiment_details.get('post_count', 0) > 0
+            }
+        })
+        
+        return AggregatedSentimentResponse(**response_dict)
 
     async def analyze_text(self, text: str) -> Dict[str, Any]:
         """
         Analyzes a single piece of text using the base sentiment analyzer.
         """
-        result = await super().analyze_text(text)
+        result = await self.base_analyzer.analyze_text(text)
         result['timestamp'] = datetime.now().isoformat()
         return result
 

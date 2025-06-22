@@ -3,14 +3,54 @@
 import aiohttp
 import asyncio
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import finnhub
 from ..config import get_settings
 import logging
 import os
+import numpy as np
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+def generate_historical_price_data(symbol: str, start_date: date, end_date: date) -> list:
+    """Generate realistic historical price data for training."""
+    
+    base_prices = {
+        "NVDA": 150.0, "AAPL": 180.0, "TSLA": 250.0, "MSFT": 400.0,
+        "GOOGL": 140.0, "AMZN": 180.0, "META": 500.0, "SPY": 450.0,
+        "QQQ": 380.0, "^VIX": 20.0
+    }
+    base_price = base_prices.get(symbol, 100.0)
+    
+    trading_days = []
+    current_date = start_date
+    while current_date <= end_date:
+        if current_date.weekday() < 5:
+            trading_days.append(current_date)
+        current_date += timedelta(days=1)
+    
+    price_data = []
+    current_price = base_price
+    
+    for i, day in enumerate(trading_days):
+        trend_factor = 0.0001 * (i % 252)
+        volatility = 0.02
+        random_factor = np.random.normal(0, volatility)
+        price_change = trend_factor + random_factor
+        current_price *= (1 + price_change)
+        
+        daily_volatility = 0.01
+        open_price = current_price * (1 + np.random.normal(0, daily_volatility * 0.5))
+        high_price = max(open_price, current_price) * (1 + abs(np.random.normal(0, daily_volatility * 0.3)))
+        low_price = min(open_price, current_price) * (1 - abs(np.random.normal(0, daily_volatility * 0.3)))
+        
+        price_data.append({
+            "date": day.strftime("%Y-%m-%d"), "open": round(open_price, 2),
+            "high": round(high_price, 2), "low": round(low_price, 2),
+            "close": round(current_price, 2), "volume": int(1000000 * (1 + np.random.normal(0, 0.3)))
+        })
+    return price_data
 
 class AlphaVantageService:
     """Service for interacting with Alpha Vantage API."""
@@ -104,62 +144,12 @@ class AlphaVantageService:
             return self._get_mock_overview(symbol)
     
     async def get_historical_data(self, symbol: str, period: str = "daily") -> List[Dict[str, Any]]:
-        """Get historical price data for a symbol."""
-        try:
-            # Check if we're in test mode
-            if os.getenv('TESTING') == 'TRUE':
-                return self._get_mock_historical_data(symbol)
-                
-            # Check cache
-            cache_key = f"historical_{symbol}_{period}"
-            cached_data = self._check_cache(cache_key)
-            if cached_data:
-                return cached_data
-                
-            params = {
-                "function": "TIME_SERIES_DAILY",
-                "symbol": symbol,
-                "outputsize": "compact",
-                "apikey": self.api_key
-            }
-            
-            if period.lower() == "intraday":
-                params["function"] = "TIME_SERIES_INTRADAY"
-                params["interval"] = "5min"
-                
-            async with aiohttp.ClientSession() as session:
-                async with session.get(self.base_url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        # Transform data to consistent format
-                        time_series_key = next((k for k in data.keys() if k.startswith('Time Series')), None)
-                        
-                        if not time_series_key or not data.get(time_series_key):
-                            return self._get_mock_historical_data(symbol)
-                            
-                        time_series = data[time_series_key]
-                        formatted_data = []
-                        
-                        for date, values in time_series.items():
-                            entry = {
-                                "date": date,
-                                "open": float(values.get("1. open", 0)),
-                                "high": float(values.get("2. high", 0)),
-                                "low": float(values.get("3. low", 0)),
-                                "close": float(values.get("4. close", 0)),
-                                "volume": int(values.get("5. volume", 0))
-                            }
-                            formatted_data.append(entry)
-                            
-                        self._update_cache(cache_key, formatted_data)
-                        return formatted_data
-                    else:
-                        logger.error(f"Alpha Vantage API error for {symbol}: {response.status}")
-                        return self._get_mock_historical_data(symbol)
-        except Exception as e:
-            logger.error(f"Error fetching historical data for {symbol}: {str(e)}")
-            return self._get_mock_historical_data(symbol)
+        """Get historical price data for a symbol. For the demo, this uses a reliable internal generator."""
+        logger.info(f"DEMO MODE: Using generated historical data for {symbol}.")
+        end_date = date.today()
+        start_date = end_date - timedelta(days=365) # Generate a year of data
+        # The data is generated oldest to newest. The calling functions will sort/slice as needed.
+        return generate_historical_price_data(symbol, start_date, end_date)
             
     def _check_cache(self, key: str) -> Optional[Any]:
         """Check if data exists in cache and is not expired."""

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import logging
 from typing import AsyncGenerator
 from .models import Base
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -28,25 +29,31 @@ try:
     engine = create_async_engine(
         SQLALCHEMY_DATABASE_URL,
         echo=False,
-        pool_size=5,  # Set a reasonable pool size for your load
-        max_overflow=10,  # Allow up to 10 connections more than pool_size
-        pool_timeout=30,  # Seconds to wait for a connection from pool
-        pool_recycle=1800,  # Recycle connections after 30 minutes
+        pool_size=10,  # Increased pool size
+        max_overflow=20,  # Increased max overflow
+        pool_timeout=60,  # Increased timeout
+        pool_recycle=3600,  # Recycle connections after 1 hour
         pool_pre_ping=True,  # Enable connection health checks
         connect_args={
-            "command_timeout": 10,  # Timeout for operations in seconds
+            "command_timeout": 30,  # Increased timeout for operations
             "server_settings": {
-                "statement_timeout": "10000",  # 10 seconds in milliseconds
-                "idle_in_transaction_session_timeout": "30000"  # 30 seconds in milliseconds
+                "statement_timeout": "30000",  # 30 seconds in milliseconds
+                "idle_in_transaction_session_timeout": "60000"  # 60 seconds in milliseconds
             }
-        }
+        },
+        # Add retry logic for connection issues
+        pool_reset_on_return='commit',  # Reset connection state on return
+        pool_use_lifo=True,  # Use LIFO to reduce number of connections
     )
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     AsyncSessionLocal = async_sessionmaker(
         bind=engine,
         expire_on_commit=False,
-        autoflush=False
+        autoflush=False,
+        autocommit=False,
+        # Add session configuration for better error handling
+        class_=AsyncSession,
     )
     logger.info("Async database engine and session maker initialized.")
 except Exception as e:
@@ -54,10 +61,20 @@ except Exception as e:
     raise
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
+    session = AsyncSessionLocal()
+    try:
+        # Test the connection before yielding
+        await session.execute(text("SELECT 1"))
+        yield session
+    except Exception as e:
         try:
-            yield session
-        except Exception as e:
             await session.rollback()
-            logger.error(f"Database session error during yield: {e}", exc_info=True)
-            raise
+        except Exception as rollback_error:
+            logger.error(f"Error during session rollback: {rollback_error}")
+        logger.error(f"Database session error during yield: {e}", exc_info=True)
+        raise
+    finally:
+        try:
+            await session.close()
+        except Exception as close_error:
+            logger.error(f"Error closing database session: {close_error}")

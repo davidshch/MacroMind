@@ -188,7 +188,7 @@ class MLModelFactory:
                 "error": str(e)
             }
 
-    async def predict_volatility(self, features_for_prediction: pd.DataFrame) -> Dict[str, Any]:
+    async def predict_volatility(self, features_for_prediction: pd.DataFrame, model_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Predict future volatility using the trained XGBoost model.
 
@@ -196,6 +196,8 @@ class MLModelFactory:
             features_for_prediction: DataFrame containing the features for a single prediction point.
                                      Must have the same columns (or a superset) as the training data,
                                      with original column names.
+            model_path: Optional path to a specific model to use for this prediction.
+                        If None, uses the model loaded during factory initialization.
 
         Returns:
             A dictionary containing:
@@ -203,31 +205,40 @@ class MLModelFactory:
                 - "feature_names": A list of feature names used by the model (List[str]).
             Returns {"prediction": 0.0, "feature_names": []} if prediction fails.
         """
-        if self.volatility_model is None:
+        logger.debug(f"Entering predict_volatility for model_path: {model_path}")
+        
+        model_to_use = self.volatility_model
+        model_source_path = self.volatility_model_path
+        
+        if model_path and os.path.exists(model_path):
+            try:
+                logger.debug(f"Loading model from specified path: {model_path}")
+                model_to_use = self._load_volatility_model(model_path)
+                model_source_path = model_path
+                if model_to_use is None:
+                    logger.error(f"Failed to load model from specified path: {model_path}. Falling back to default.")
+                    model_to_use = self.volatility_model
+                    model_source_path = self.volatility_model_path
+                else:
+                    logger.debug(f"Successfully loaded model from {model_path}")
+            except Exception as e:
+                logger.error(f"Exception loading model from {model_path}, falling back. Error: {e}")
+                model_to_use = self.volatility_model
+                model_source_path = self.volatility_model_path
+
+        if model_to_use is None:
             logger.error("Volatility model is not loaded.")
             return {"prediction": 0.0, "feature_names": []}
+        
+        logger.debug("Model to use has been determined.")
 
         # Check if the model is an XGBoost model and seems trained
-        is_sklearn_wrapper = hasattr(self.volatility_model, 'feature_names_in_')
-        is_native_xgboost = hasattr(self.volatility_model, 'get_booster') and hasattr(self.volatility_model.get_booster(), 'feature_names')
+        is_sklearn_wrapper = hasattr(model_to_use, 'feature_names_in_')
+        is_native_xgboost = hasattr(model_to_use, 'get_booster') and hasattr(model_to_use.get_booster(), 'feature_names')
 
-        if not (is_sklearn_wrapper or (is_native_xgboost and self.volatility_model.get_booster().feature_names)):
-            if self.volatility_model_path == DEFAULT_VOLATILITY_MODEL_PATH and os.path.exists(DEFAULT_VOLATILITY_MODEL_PATH):
-                logger.info(f"Default model at {DEFAULT_VOLATILITY_MODEL_PATH} seems untrained or lacks feature names. Attempting reload.")
-                reloaded_model = self._load_volatility_model(DEFAULT_VOLATILITY_MODEL_PATH)
-                if reloaded_model:
-                    self.volatility_model = reloaded_model
-                    is_sklearn_wrapper = hasattr(self.volatility_model, 'feature_names_in_')
-                    is_native_xgboost = hasattr(self.volatility_model, 'get_booster') and hasattr(self.volatility_model.get_booster(), 'feature_names')
-                    if not (is_sklearn_wrapper or (is_native_xgboost and self.volatility_model.get_booster().feature_names)):
-                        logger.error("Reloaded default volatility model still appears untrained or lacks feature names. Cannot predict.")
-                        return {"prediction": 0.0, "feature_names": []}
-                else:
-                    logger.error("Failed to reload default volatility model. Cannot predict.")
-                    return {"prediction": 0.0, "feature_names": []}
-            else:
-                logger.error(f"Volatility model at {self.volatility_model_path} appears untrained or lacks feature names. Cannot predict.")
-                return {"prediction": 0.0, "feature_names": []}
+        if not (is_sklearn_wrapper or (is_native_xgboost and model_to_use.get_booster().feature_names)):
+            logger.error(f"Volatility model at {model_source_path} appears untrained or lacks feature names. Cannot predict.")
+            return {"prediction": 0.0, "feature_names": []}
 
         if features_for_prediction.empty:
             logger.warning("Features DataFrame for volatility prediction is empty.")
@@ -240,10 +251,10 @@ class MLModelFactory:
         features_df_safe_names.columns = safe_feature_names_input
 
         model_feature_names = []
-        if is_native_xgboost and self.volatility_model.get_booster().feature_names:
-            model_feature_names = self.volatility_model.get_booster().feature_names
-        elif is_sklearn_wrapper and hasattr(self.volatility_model, 'feature_names_in_') and self.volatility_model.feature_names_in_ is not None:
-            model_feature_names = self.volatility_model.feature_names_in_.tolist()
+        if is_native_xgboost and model_to_use.get_booster().feature_names:
+            model_feature_names = model_to_use.get_booster().feature_names
+        elif is_sklearn_wrapper and hasattr(model_to_use, 'feature_names_in_') and model_to_use.feature_names_in_ is not None:
+            model_feature_names = model_to_use.feature_names_in_.tolist()
         
         if not model_feature_names:
             logger.error("Could not retrieve feature names from the trained model.")
@@ -260,8 +271,10 @@ class MLModelFactory:
         features_to_predict_with = aligned_features_df[model_feature_names]
 
         try:
-            prediction = self.volatility_model.predict(features_to_predict_with)
+            logger.debug("Calling model.predict...")
+            prediction = model_to_use.predict(features_to_predict_with)
             predicted_value = float(prediction[0]) if isinstance(prediction, (np.ndarray, list)) else float(prediction)
+            logger.debug(f"Model prediction successful: {predicted_value}")
             
             return {"prediction": predicted_value, "feature_names": model_feature_names}
 
@@ -689,41 +702,21 @@ class MLModelFactory:
                 "message": f"Successfully analyzed {processed_event_count} past events (Prophet smoothing failed, returning raw average)."
             }
 
-async def example_train_and_predict():
-    factory = MLModelFactory()
-
-    n_samples = 100
-    data = {
-        'historical_vol_20d': np.random.rand(n_samples) * 0.05 + 0.01,
-        'sentiment_score': np.random.rand(n_samples) * 2 - 1,
-        'vix_close': np.random.rand(n_samples) * 30 + 10
-    }
-    features_df = pd.DataFrame(data)
-    
-    target_series = (
-        0.5 * features_df['historical_vol_20d'] + 
-        0.3 * (features_df['sentiment_score'] * 0.01) + 
-        0.2 * (features_df['vix_close'] / 1000) + 
-        np.random.rand(n_samples) * 0.005
-    )
-    target_series = target_series.clip(0.001)
-
-    training_success = await factory.train_volatility_model(features_df, target_series)
-    
-    if training_success:
-        logger.info("Model trained successfully.")
-        new_features_data = {
-            'historical_vol_20d': [0.025],
-            'sentiment_score': [0.5],
-            'vix_close': [22.0]
-        }
-        new_features_df = pd.DataFrame(new_features_data)
-        
-        predicted_vol = await factory.predict_volatility(new_features_df)
-        logger.info(f"Predicted volatility: {predicted_vol}")
-    else:
-        logger.error("Model training failed.")
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     pass
+
+# Dependency provider for MLModelFactory
+_ml_model_factory_instance = None
+
+def get_ml_model_factory() -> MLModelFactory:
+    """
+    Dependency provider for MLModelFactory.
+    
+    Returns:
+        MLModelFactory: A singleton instance of the model factory.
+    """
+    global _ml_model_factory_instance
+    if _ml_model_factory_instance is None:
+        _ml_model_factory_instance = MLModelFactory()
+    return _ml_model_factory_instance

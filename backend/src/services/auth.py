@@ -8,11 +8,14 @@ from ..database.database import get_db
 from ..database.models import User  # Add this import
 from ..config import get_settings  # Add this import
 import logging
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 settings = get_settings()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     logger.debug(f"Verifying password...")
@@ -36,37 +39,55 @@ def create_access_token(data: dict) -> str:
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> User:
+    """
+    Dependency to get the current user from an OAuth2 token.
+    Decodes the JWT and fetches the user from the database.
+    """
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
-        payload = jwt.decode(
-            token, 
-            settings.jwt_secret, 
-            algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token format",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    except JWTError as e:
-        logger.error(f"JWT decode error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    from .user import UserService  # Import here to avoid circular import
-    user = UserService(db).get_user_by_email(email)
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = await db.execute(select(User).where(User.email == email))
+    user = user.scalar_one_or_none()
+    
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise credentials_exception
+    return user
+
+async def get_current_user_from_token(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """
+    Gets the current user from a token string.
+    Used for WebSockets where Depends(oauth2_scheme) cannot be used directly.
+    """
+    # This function re-uses the logic from get_current_user but is adapted for ws
+    if not token:
+        return None
+        
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+    except JWTError:
+        return None
+    
+    user_result = await db.execute(select(User).where(User.email == email))
+    user = user_result.scalar_one_or_none()
+    
     return user
 
 async def get_current_active_user(

@@ -10,8 +10,8 @@ from ..config import get_settings
 from ..database.models import EconomicEvent
 from ..database.database import get_db  # For AsyncSession dependency
 from ..schemas.event import EventResponse, EventEchoResponse, EventEchoPatternPoint, EventCreate  # Added EventCreate
-from .ml.model_factory import MLModelFactory, get_ml_model_factory
-from .market_data import MarketDataService, get_market_data_service
+from src.services.ml.model_factory import MLModelFactory, get_ml_model_factory
+from .market_data import MarketDataService
 from sqlalchemy import select, and_, delete, update  # Keep other sqlalchemy imports as needed by other methods
 from sqlalchemy.exc import SQLAlchemyError
 import pandas as pd
@@ -26,11 +26,11 @@ class EconomicCalendarService:
     def __init__(self, 
                  db: AsyncSession = Depends(get_db),  # Changed to AsyncSession
                  ml_model_factory: MLModelFactory = Depends(get_ml_model_factory),
-                 market_data_service: MarketDataService = Depends(get_market_data_service)
+                 market_data_service: MarketDataService = None
                 ):
         self.db = db
         self.ml_model_factory = ml_model_factory
-        self.market_data_service = market_data_service
+        self.market_data_service = market_data_service or MarketDataService()  # Create if not provided
         self.cache = {}
         self.cache_duration = timedelta(hours=4)
 
@@ -280,11 +280,9 @@ class EconomicCalendarService:
 # Dependency provider for EconomicCalendarService
 async def get_economic_calendar_service(
     db: AsyncSession = Depends(get_db),
-    ml_model_factory: MLModelFactory = Depends(get_ml_model_factory),
-    market_data_service: MarketDataService = Depends(get_market_data_service)
+    ml_model_factory: MLModelFactory = Depends(get_ml_model_factory)
 ) -> EconomicCalendarService:
     return EconomicCalendarService(
         db=db, 
-        ml_model_factory=ml_model_factory, 
-        market_data_service=market_data_service
+        ml_model_factory=ml_model_factory
     )

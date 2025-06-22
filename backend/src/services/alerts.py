@@ -21,8 +21,10 @@ from src.schemas.alert import (
 )
 from src.services.sentiment_analysis import SentimentAnalysisService
 from src.services.volatility import VolatilityService
+from .websocket import websocket_service_instance
 
 from ..database.database import get_db
+from ..core.dependencies import get_sentiment_service, get_volatility_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,7 @@ class AlertService:
             name=alert_data.name,
             symbol=alert_data.symbol,
             conditions=alert_data.conditions.model_dump(),  # Store as dict/JSON
+            notes=alert_data.notes,  # Add the notes field back
             is_active=alert_data.is_active,
         )
         self.db.add(db_alert)
@@ -330,6 +333,20 @@ class AlertService:
 
         if alerts_to_update_in_db:
             for alert_to_update in alerts_to_update_in_db:
+                # Send WebSocket notification
+                notification = {
+                    "type": "alert_triggered",
+                    "title": f"Alert Triggered: {alert_to_update.name or alert_to_update.symbol}",
+                    "description": f"Your alert for {alert_to_update.symbol} has been triggered.",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "details": {
+                        "alert_id": alert_to_update.id,
+                        "symbol": alert_to_update.symbol,
+                    },
+                }
+                await websocket_service_instance.send_personal_message(
+                    notification, str(alert_to_update.user_id)
+                )
                 self.db.add(alert_to_update)
             try:
                 await self.db.commit()
@@ -341,8 +358,8 @@ class AlertService:
 # Dependency for AlertService
 async def get_alert_service(
     db: AsyncSession = Depends(get_db),
-    sentiment_service: SentimentAnalysisService = Depends(),
-    volatility_service: VolatilityService = Depends()
+    sentiment_service: SentimentAnalysisService = Depends(get_sentiment_service),
+    volatility_service: VolatilityService = Depends(get_volatility_service)
 ) -> AlertService:
     return AlertService(
         db=db,

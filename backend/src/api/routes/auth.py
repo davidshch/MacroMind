@@ -63,7 +63,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         
         if not is_valid:
             logger.warning(f"Login failed: Invalid password for user: {request.email}")
-            raise HTTPException(status_code=401, detail="Invalid password")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
         
         # Create token
         logger.debug("Creating access token...")
@@ -72,8 +72,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         logger.info(f"User logged in successfully: {request.email}")
         return TokenResponse(access_token=token, token_type="bearer")
         
-    except HTTPException:
-        raise
+    except HTTPException as http_exc:
+        logger.warning(f"Login failed for {request.email} with status {http_exc.status_code}: {http_exc.detail}")
+        raise http_exc
     except Exception as e:
-        logger.error(f"Login failed with error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Login failed with unexpected error for user {request.email}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected internal error occurred.")
