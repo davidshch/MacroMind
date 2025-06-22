@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useSymbolStore } from "@/lib/store";
 import {
   Tabs,
   TabsContent,
@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { SymbolSwitcher } from "@/components/symbol-switcher";
 import { OverviewChart } from "@/components/overview-chart";
 import { SentimentTab } from "@/components/sentiment-tab";
 import { VolatilityTab } from "@/components/volatility-tab";
@@ -21,10 +20,10 @@ import { AIAnalystTab } from "@/components/ai-analyst-tab";
 import { AlertsTab } from "@/components/alerts-tab";
 
 export default function Dashboard() {
-  const [symbol, setSymbol] = useState("AAPL");
+  const { currentSymbol, setCurrentSymbol } = useSymbolStore();
 
   const handleSymbolChange = (newSymbol: string) => {
-    setSymbol(newSymbol);
+    setCurrentSymbol(newSymbol);
   };
 
   return (
@@ -37,13 +36,10 @@ export default function Dashboard() {
           <TabsTrigger value="volatility">Volatility</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
         </TabsList>
-        <div className="ml-auto flex items-center gap-2">
-          <SymbolSwitcher symbol={symbol} setSymbol={handleSymbolChange} />
-        </div>
       </div>
 
       <TabsContent value="ai-analyst">
-        <AIAnalystTab symbol={symbol} />
+        <AIAnalystTab symbol={currentSymbol} />
       </TabsContent>
 
       <TabsContent value="overview">
@@ -52,21 +48,21 @@ export default function Dashboard() {
             <CardTitle>Price Overview</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <OverviewChart symbol={symbol} />
+            <OverviewChart symbol={currentSymbol} />
           </CardContent>
         </Card>
       </TabsContent>
 
       <TabsContent value="sentiment">
-        <SentimentTab symbol={symbol} />
+        <SentimentTab symbol={currentSymbol} />
       </TabsContent>
 
       <TabsContent value="volatility">
-        <VolatilityTab symbol={symbol} />
+        <VolatilityTab symbol={currentSymbol} />
       </TabsContent>
 
       <TabsContent value="alerts">
-        <AlertsTab symbol={symbol} onSymbolChange={handleSymbolChange} />
+        <AlertsTab symbol={currentSymbol} onSymbolChange={handleSymbolChange} />
       </TabsContent>
     </Tabs>
   );

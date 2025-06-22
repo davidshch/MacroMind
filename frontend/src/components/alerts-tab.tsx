@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import { SymbolSwitcher } from "./symbol-switcher";
 
 interface Alert {
   id: number;
