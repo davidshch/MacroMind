@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -23,14 +24,43 @@ interface SentimentData {
   reddit_sentiment_details: any;
   news_sentiment_score: number;
   reddit_sentiment_score: number;
+  [key: string]: any; // Allow other properties
 }
 
 interface SentimentTabProps {
-  sentimentData: SentimentData | null;
-  isLoading: boolean;
+  symbol: string;
 }
 
-export function SentimentTab({ sentimentData: data, isLoading }: SentimentTabProps) {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
+
+export function SentimentTab({ symbol }: SentimentTabProps) {
+  const [data, setData] = useState<SentimentData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${API_URL}/api/sentiment/${symbol}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch sentiment data: ${response.statusText}`);
+        }
+        const result: SentimentData = await response.json();
+        setData(result);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [symbol]);
+
   if (isLoading) {
     return (
       <div className="grid gap-6 md:grid-cols-2">
@@ -56,11 +86,15 @@ export function SentimentTab({ sentimentData: data, isLoading }: SentimentTabPro
     );
   }
   
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
+  }
+
   if (!data) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed shadow-sm h-96">
         <div className="text-center text-muted-foreground">
-          Sentiment data not available.
+          Sentiment data not available for {symbol}.
         </div>
       </div>
     );

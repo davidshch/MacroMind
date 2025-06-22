@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, TrendingUp, Zap } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Insight {
   title: string;
@@ -20,9 +22,10 @@ interface AIAnalystData {
 }
 
 interface AIAnalystTabProps {
-  data: AIAnalystData | null;
-  isLoading: boolean;
+  symbol: string;
 }
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
 
 const getCategoryIcon = (category: string) => {
   switch (category.toLowerCase()) {
@@ -37,13 +40,70 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
-export function AIAnalystTab({ data, isLoading }: AIAnalystTabProps) {
+export function AIAnalystTab({ symbol }: AIAnalystTabProps) {
+  const [data, setData] = useState<AIAnalystData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${API_URL}/api/insights/${symbol}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch AI analysis: ${response.statusText}`);
+        }
+        const result: AIAnalystData = await response.json();
+        setData(result);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [symbol]);
+
   if (isLoading) {
-    return <div>Loading AI analysis...</div>;
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-8 w-3/4" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6 mt-2" />
+          </CardContent>
+        </Card>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <Skeleton className="h-6 w-4/5" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-6 w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
   }
 
-  if (!data) {
-    return <div>No AI analysis available.</div>;
+  if (!data || data.insights.length === 0) {
+    return <div>No AI analysis available for {symbol}.</div>;
   }
 
   return (

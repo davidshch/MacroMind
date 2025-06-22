@@ -22,86 +22,70 @@ class AIAnalystService:
         self.volatility_service = volatility_service
 
     async def get_insights(self, symbol: str) -> AIAnalystResponse:
+        logger.info(f"DEMO MODE: Returning high-quality static AI analysis for symbol '{symbol}'.")
         try:
-            sentiment_data: AggregatedSentimentResponse
-            try:
-                sentiment_data_result = await self.sentiment_service.get_aggregated_sentiment(symbol)
-                if not sentiment_data_result:
-                    raise ValueError("Sentiment service returned empty data.")
-                sentiment_data = sentiment_data_result
-            except Exception as e:
-                logger.error(f"Could not get sentiment data for {symbol}: {e}. Using fallback data.")
-                sentiment_data = AggregatedSentimentResponse(
-                    id=0,
-                    symbol=symbol,
-                    date=date.today(),
-                    overall_sentiment=SentimentType.NEUTRAL,
-                    normalized_score=0.0,
-                    avg_daily_score=0.0,
-                    moving_avg_7d=0.0,
-                    benchmark="SPY",
-                    news_sentiment_details={},
-                    reddit_sentiment_details={},
-                    news_sentiment_score=0.0,
-                    reddit_sentiment_score=0.0,
-                    market_condition="normal",
-                    volatility_context={
-                        "level": 0.2,
-                        "is_high": False,
-                        "trend": "stable"
-                    },
-                    source_weights={
-                        "news_sentiment": 0.6,
-                        "reddit_sentiment": 0.4
-                    },
-                    timestamp=datetime.now(),
-                    data_quality_score=0.5,
-                    sentiment_strength=0.0,
-                    sentiment_confidence=0.5,
-                    data_sources_available={"news": False, "reddit": False}
-                )
+            symbol_upper = symbol.upper()
+            base_confidence = 0.85
+            outlook = "Neutral to Cautiously Bullish, with High Volatility"
+            summary = (
+                f"The AI analysis for {symbol_upper} indicates a period of high uncertainty. While there is potential for a bullish reversal following the recent dip, "
+                f"volatility is expected to be high and sentiment signals are mixed. Key external factors, such as sector-wide news, could be significant drivers in the short term."
+            )
 
-            volatility_data: VolatilitySchemaResponse
-            try:
-                volatility_dict = await self.volatility_service.calculate_and_predict_volatility(symbol)
-                if not volatility_dict:
-                    raise ValueError("Volatility service returned empty data.")
-                volatility_data = VolatilitySchemaResponse(**volatility_dict)
-            except Exception as e:
-                logger.error(f"Could not get volatility data for {symbol}: {e}. Using fallback data.")
-                volatility_data = VolatilitySchemaResponse(
-                    symbol=symbol,
-                    timestamp=datetime.now(),
-                    current_volatility=0.2,
-                    historical_volatility_annualized=0.22,
-                    volatility_10d_percentile=50.0,
-                    predicted_volatility=0.21,
-                    prediction_range={"low": 0.15, "high": 0.27},
-                    market_conditions="normal",
-                    volatility_regime="normal",
-                    is_high_volatility=False,
-                    trend="stable",
-                    confidence_score=0.7,
-                    metadata={
-                        "model_version": "fallback_0.1",
-                        "features_used": [],
-                        "last_updated": datetime.now()
-                    }
+            if symbol_upper == "TSLA":
+                base_confidence = 0.80
+                outlook = "Volatile with Bearish Undercurrents"
+                summary = (
+                    f"AI analysis for {symbol_upper} reveals a highly volatile environment. While the stock is known for sharp movements, "
+                    f"current social media sentiment is leaning bearish, and the elevated volatility prediction suggests significant downside risk. "
+                    f"Any company-specific news could act as a major catalyst."
                 )
-
-            insights = self._generate_insights(sentiment_data, volatility_data)
-            summary, outlook = self._summarize_insights(insights)
+            elif symbol_upper == "NVDA":
+                base_confidence = 0.90
+                outlook = "Strongly Bullish, but Watch for Profit-Taking"
+                summary = (
+                    f"The outlook for {symbol_upper} is strongly bullish, backed by overwhelming positive sentiment from both news and social media. "
+                    f"However, predicted volatility is rising, which could indicate profit-taking or a short-term consolidation period. "
+                    f"The primary trend remains upward."
+                )
+            
+            demo_insights = [
+                Insight(
+                    title="Elevated Volatility Warning",
+                    description=f"Predicted volatility for {symbol_upper} is elevated compared to its historical average. This suggests a higher potential for significant price swings in the coming days. Traders should be cautious of increased risk.",
+                    confidence=round(base_confidence + 0.05, 2),
+                    category="Volatility"
+                ),
+                Insight(
+                    title="Mixed Sentiment Signals",
+                    description=f"Sentiment for {symbol_upper} is mixed. While news coverage remains cautiously optimistic, social media chatter shows increasing bearishness. This divergence can be a precursor to a trend change.",
+                    confidence=round(base_confidence, 2),
+                    category="Sentiment"
+                ),
+                Insight(
+                    title="Potential Opportunity: Post-Dip Consolidation",
+                    description=f"The recent price dip in {symbol_upper} appears to be consolidating. Combined with underlying neutral-to-positive news flow, this could signal a bottoming formation. A break above near-term resistance could indicate a bullish reversal.",
+                    confidence=round(base_confidence - 0.1, 2),
+                    category="Opportunity"
+                ),
+                Insight(
+                    title="Key Driver: Sector-Wide Scrutiny",
+                    description=f"The entire tech sector is under scrutiny regarding upcoming regulatory discussions. Any news on this front could act as a major catalyst for {symbol_upper}, overriding current technical and sentiment signals.",
+                    confidence=round(base_confidence - 0.05, 2),
+                    category="Market"
+                )
+            ]
 
             return AIAnalystResponse(
-                symbol=symbol,
+                symbol=symbol_upper,
+                generated_at=datetime.now(),
                 overall_outlook=outlook,
                 summary=summary,
-                insights=insights,
-                generated_at=datetime.now()
+                insights=demo_insights
             )
         except Exception as e:
-            logger.exception(f"Error generating insights for {symbol}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate AI analysis.")
+            logger.exception(f"Error generating static demo insights for {symbol}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate AI analysis even in demo mode.")
 
     def _generate_insights(self, sentiment: AggregatedSentimentResponse, volatility: VolatilitySchemaResponse) -> list[Insight]:
         insights = []
@@ -123,14 +107,14 @@ class AIAnalystService:
             ))
 
         # Sentiment Insights
-        if sentiment.overall_sentiment.value == "bullish" and sentiment.normalized_score > 0.5:
+        if str(sentiment.overall_sentiment) == "bullish" and sentiment.normalized_score > 0.5:
             insights.append(Insight(
                 title="Strong Bullish Sentiment",
                 description=f"Market sentiment is strongly bullish with a score of {sentiment.normalized_score:.2f}, driven by positive news and social media conversation.",
                 confidence=sentiment.sentiment_confidence or 0.85,
                 category="Sentiment"
             ))
-        elif sentiment.overall_sentiment.value == "bearish" and sentiment.normalized_score < -0.5:
+        elif str(sentiment.overall_sentiment) == "bearish" and sentiment.normalized_score < -0.5:
              insights.append(Insight(
                 title="Strong Bearish Sentiment",
                 description=f"Market sentiment is strongly bearish with a score of {sentiment.normalized_score:.2f}, driven by negative news and social media conversation.",
@@ -139,14 +123,14 @@ class AIAnalystService:
             ))
 
         # Combined Insights
-        if volatility.is_high_volatility and sentiment.overall_sentiment.value == "bullish":
+        if volatility.is_high_volatility and str(sentiment.overall_sentiment) == "bullish":
             insights.append(Insight(
                 title="Opportunity: Bullish High-Volatility",
                 description="High volatility combined with strong bullish sentiment may present trading opportunities for those with high risk tolerance.",
                 confidence=0.75,
                 category="Opportunity"
             ))
-        elif volatility.is_high_volatility and sentiment.overall_sentiment.value == "bearish":
+        elif volatility.is_high_volatility and str(sentiment.overall_sentiment) == "bearish":
             insights.append(Insight(
                 title="Warning: Bearish High-Volatility",
                 description="High volatility combined with strong bearish sentiment is a risky environment. Caution is advised.",

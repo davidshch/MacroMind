@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { useSymbolStore } from "@/lib/store";
 import { Skeleton } from "./ui/skeleton";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
+
 interface VolatilityData {
   predicted_volatility: number;
   prediction_range: {
@@ -39,12 +41,54 @@ interface HistoricalVolatility {
 }
 
 interface VolatilityTabProps {
-  volatilityData: VolatilityData | null;
-  historicalData: HistoricalVolatility[];
-  isLoading: boolean;
+  symbol: string;
 }
 
-export function VolatilityTab({ volatilityData, historicalData, isLoading }: VolatilityTabProps) {
+export function VolatilityTab({ symbol }: VolatilityTabProps) {
+  const [volatilityData, setVolatilityData] = useState<VolatilityData | null>(null);
+  const [historicalData, setHistoricalData] = useState<HistoricalVolatility[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [volatilityResponse, historicalResponse] = await Promise.all([
+          fetch(`${API_URL}/api/volatility/predict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: symbol })
+          }),
+          fetch(`${API_URL}/api/volatility/historical/${symbol}`)
+        ]);
+
+        if (!volatilityResponse.ok) {
+          throw new Error(`Failed to fetch volatility forecast: ${volatilityResponse.statusText}`);
+        }
+        if (!historicalResponse.ok) {
+          throw new Error(`Failed to fetch historical volatility: ${historicalResponse.statusText}`);
+        }
+
+        const volData = await volatilityResponse.json();
+        const histData = await historicalResponse.json();
+
+        setVolatilityData(volData);
+        setHistoricalData(histData);
+
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [symbol]);
+
   if (isLoading) {
     return (
       <div className="grid gap-6 md:grid-cols-2">
@@ -75,11 +119,15 @@ export function VolatilityTab({ volatilityData, historicalData, isLoading }: Vol
     );
   }
 
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
+  }
+
   if (!volatilityData) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed shadow-sm h-96">
         <div className="text-center text-muted-foreground">
-          Volatility data not available.
+          Volatility data not available for {symbol}.
         </div>
       </div>
     );

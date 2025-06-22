@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -12,11 +13,48 @@ import {
 } from "recharts";
 import { Skeleton } from "./ui/skeleton";
 
-export function OverviewChart({ data, isLoading }: { data: any[], isLoading: boolean }) {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
+
+interface OverviewChartProps {
+  symbol: string;
+}
+
+export function OverviewChart({ symbol }: OverviewChartProps) {
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${API_URL}/api/visualization/historical-prices/${symbol}?days=90`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch price data: ${response.statusText}`);
+        }
+        const result = await response.json();
+        setData(result);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [symbol]);
+
   if (isLoading) {
     return <Skeleton className="h-[350px] w-full" />;
   }
   
+  if (error) {
+    return <p className="text-red-500">Error loading chart data: {error}</p>;
+  }
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       {data && data.length > 0 ? (
@@ -56,7 +94,7 @@ export function OverviewChart({ data, isLoading }: { data: any[], isLoading: boo
           />
         </LineChart>
       ) : (
-        <p>No data available</p>
+        <p>No data available for {symbol}</p>
       )}
     </ResponsiveContainer>
   );
