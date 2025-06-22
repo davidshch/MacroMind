@@ -111,11 +111,16 @@ class MarketDataService:
             # Use AlphaVantageService's method
             historical_data = await self.alpha_vantage.get_historical_data(symbol, period="daily")
 
-            # Sort data by date descending if needed (AV usually returns descending)
-            # historical_data.sort(key=lambda x: x['date'], reverse=True)
+            # AlphaVantageService returns data oldest -> newest. We want the MOST RECENT lookback_days.
+            # Ensure chronological order first, then slice the tail.
+            historical_data_sorted = sorted(
+                [p for p in historical_data if p.get("date")],
+                key=lambda p: p["date"]
+            )
 
-            # Return the requested number of days (or less if not available)
-            return historical_data[:lookback_days]
+            recent_slice = historical_data_sorted[-lookback_days:]
+
+            return recent_slice
 
         except Exception as e:
             logger.error(f"Error fetching historical prices for {symbol}: {str(e)}")

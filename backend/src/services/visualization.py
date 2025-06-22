@@ -28,10 +28,13 @@ class VisualizationService:
                 key=lambda p: datetime.strptime(p['date'], '%Y-%m-%d')
             )
 
+            # Keep only the most recent `days` entries while preserving chronological order
+            trimmed = sorted_data[-days:]
+
             # The frontend expects 'price'. Let's remap 'close' to 'price'.
             return [
                 {"date": p.get("date"), "price": p.get("close")}
-                for p in sorted_data
+                for p in trimmed
             ]
         except Exception as e:
             logger.exception(f"Error fetching historical prices from MarketDataService for {symbol}: {e}")

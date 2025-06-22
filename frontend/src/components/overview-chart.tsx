@@ -36,7 +36,11 @@ export function OverviewChart({ symbol }: OverviewChartProps) {
           throw new Error(`Failed to fetch price data: ${response.statusText}`);
         }
         const result = await response.json();
-        setData(result);
+        // Ensure chronological order (oldest -> newest)
+        const sorted = [...result].sort(
+          (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        setData(sorted);
       } catch (err: any) {
         setError(err.message);
       } finally {

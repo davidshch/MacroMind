@@ -1,6 +1,8 @@
 from fastapi import Depends, HTTPException
 from datetime import datetime, date
 import logging
+import hashlib
+import random
 
 from ..schemas.ai_analyst import AIAnalystResponse, Insight
 from ..services.sentiment_analysis import SentimentAnalysisService
@@ -48,29 +50,78 @@ class AIAnalystService:
                     f"However, predicted volatility is rising, which could indicate profit-taking or a short-term consolidation period. "
                     f"The primary trend remains upward."
                 )
-            
+            else:
+                # Generic but varied generation based on symbol hash to avoid identical output.
+                hash_int = int(hashlib.sha256(symbol_upper.encode()).hexdigest(), 16)
+                random.seed(hash_int)
+
+                outlook_options = [
+                    "Stable with Mild Upside Potential",
+                    "Range-Bound and Awaiting Catalyst",
+                    "Cautiously Bearish with Low Volatility",
+                ]
+                outlook = random.choice(outlook_options)
+
+                summary_templates = [
+                    f"{symbol_upper} is currently trading in a tight range with limited directional bias. Key technical levels are acting as magnets while broader market sentiment remains neutral.",
+                    f"The market seems undecided on {symbol_upper}. Despite mixed news flow, option markets are pricing in modest moves, suggesting participants are waiting for a breakout trigger.",
+                    f"{symbol_upper} shows no strong momentum either way. Fundamental drivers appear priced in, so traders may focus on short-term mean-reversion strategies until new information emerges.",
+                ]
+                summary = random.choice(summary_templates)
+
+                base_confidence = round(0.75 + (hash_int % 10) * 0.01, 2)  # 0.75-0.84
+
+            # Build varied insight titles/descriptions deterministically per symbol
+            def pick(options: list[str]) -> str:
+                return random.choice(options)
+
+            vol_titles = [
+                "Elevated Volatility Warning",
+                "Volatility Cooling Off",
+                "Sudden Volatility Spike",
+                "Volatility Compression Phase"
+            ]
+            sent_titles = [
+                "Mixed Sentiment Signals",
+                "Bullish Social Buzz",
+                "Bearish News Flow",
+                "Diverging Retail vs Institutional Sentiment"
+            ]
+            opp_titles = [
+                "Post-Dip Consolidation Opportunity",
+                "Breakout Setup Forming",
+                "Mean-Reversion Play",
+                "Momentum Continuation Setup"
+            ]
+            driver_titles = [
+                "Key Driver: Sector-Wide Scrutiny",
+                "Key Driver: Macro Headwinds",
+                "Key Driver: Earnings Anticipation",
+                "Key Driver: Regulatory Catalysts"
+            ]
+
             demo_insights = [
                 Insight(
-                    title="Elevated Volatility Warning",
-                    description=f"Predicted volatility for {symbol_upper} is elevated compared to its historical average. This suggests a higher potential for significant price swings in the coming days. Traders should be cautious of increased risk.",
+                    title=pick(vol_titles),
+                    description=f"Predicted volatility for {symbol_upper} is currently {'above' if base_confidence>0.8 else 'near'} its recent average. Expect {{'larger' if base_confidence>0.8 else 'modest'}} price swings in the coming sessions.",
                     confidence=round(base_confidence + 0.05, 2),
                     category="Volatility"
                 ),
                 Insight(
-                    title="Mixed Sentiment Signals",
-                    description=f"Sentiment for {symbol_upper} is mixed. While news coverage remains cautiously optimistic, social media chatter shows increasing bearishness. This divergence can be a precursor to a trend change.",
+                    title=pick(sent_titles),
+                    description=f"Sentiment readings for {symbol_upper} show a {{'cautiously optimistic' if base_confidence>0.8 else 'neutral to slightly bearish'}} tone across major channels.",
                     confidence=round(base_confidence, 2),
                     category="Sentiment"
                 ),
                 Insight(
-                    title="Potential Opportunity: Post-Dip Consolidation",
-                    description=f"The recent price dip in {symbol_upper} appears to be consolidating. Combined with underlying neutral-to-positive news flow, this could signal a bottoming formation. A break above near-term resistance could indicate a bullish reversal.",
+                    title=pick(opp_titles),
+                    description=f"Price action in {symbol_upper} suggests a potential trading setup. Watch the {{'resistance' if base_confidence>0.8 else 'support'}} levels for confirmation.",
                     confidence=round(base_confidence - 0.1, 2),
                     category="Opportunity"
                 ),
                 Insight(
-                    title="Key Driver: Sector-Wide Scrutiny",
-                    description=f"The entire tech sector is under scrutiny regarding upcoming regulatory discussions. Any news on this front could act as a major catalyst for {symbol_upper}, overriding current technical and sentiment signals.",
+                    title=pick(driver_titles),
+                    description=f"An upcoming catalyst specific to {symbol_upper} or its sector could override current technical signals. Stay alert to breaking headlines and macro releases.",
                     confidence=round(base_confidence - 0.05, 2),
                     category="Market"
                 )
